@@ -17,6 +17,7 @@ import { ReadingSessionRepository } from './library/reading-sessions'
 import { ReadingStatsRepository, mergeServerStats } from './library/reading-stats'
 import { SyncService } from './sync/sync-service'
 import { seedLibraryIfEmpty } from './library/seed'
+import { ReadingPositionPublisher } from './reading-position-publisher'
 
 /**
  * Worker entry point. Runs in an Electron utilityProcess (isolated Node
@@ -45,6 +46,7 @@ function initLibrary(): {
   annotations: AnnotationRepository
   search: BookSearchService
   sync: SyncService
+  positions: ReadingPositionPublisher
 } {
   const dataDir = process.env.LISEUR_DATA_DIR
   if (!dataDir) throw new Error('LISEUR_DATA_DIR not set — worker must be launched by main')
@@ -73,11 +75,23 @@ function initLibrary(): {
   })
 
   const opener = new BookOpener(db, dataDir, (bookId) => sync.downloadBook(bookId))
+  const library = new LibraryService(db)
   const sessions = new ReadingSessionRepository(db)
   sync.trackSessions(sessions)
 
+  // Application-scoped, wired once — not owned by any reader request or
+  // component lifecycle (see reading-position-publisher.ts).
+  const positions = new ReadingPositionPublisher({
+    setProgress: (bookId, locator, progression, when) =>
+      library.setProgress(bookId, locator, progression, when),
+    recordSession: (bookId, at, progression) => sessions.record(bookId, at, progression),
+    enqueueSync: (book, locator, progression) => sync.enqueueProgress(book, locator, progression),
+    onBookUpdated: (book) => broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book } }),
+    log: (message) => console.error(`[worker] ${message}`),
+  })
+
   return {
-    library: new LibraryService(db),
+    library,
     ingestion,
     opener,
     sessions,
@@ -85,10 +99,12 @@ function initLibrary(): {
     annotations: new AnnotationRepository(db),
     search: new BookSearchService(db),
     sync,
+    positions,
   }
 }
 
-const { library, ingestion, opener, annotations, search, sync, sessions, stats } = initLibrary()
+const { library, ingestion, opener, annotations, search, sync, sessions, stats, positions } =
+  initLibrary()
 
 /**
  * Reading figures for the statistics screen. This machine's own records are
@@ -197,17 +213,19 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
         .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
     case 'reader.setProgress': {
-      const book = library.setProgress(
-        request.bookId,
-        request.locator,
-        request.progression,
-        Date.now(),
-      )
-      sessions.record(request.bookId, Date.now(), request.progression)
-      send(port, { kind: 'reader.progress.saved', id: request.id })
-      broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book } })
-      // Remote books: coalesce into the persisted push queue.
-      sync.enqueueProgress(book, request.locator, request.progression)
+      // Application-scoped, ordered publisher: commits (SQLite write +
+      // durable sync_queue enqueue) before acknowledging the renderer. A
+      // failure here rejects, so the renderer's outbox entry survives for
+      // replay instead of being silently dropped.
+      void positions
+        .publish({
+          bookId: request.bookId,
+          locator: request.locator,
+          progression: request.progression,
+          updatedAt: Date.now(),
+        })
+        .then(() => send(port, { kind: 'reader.progress.saved', id: request.id }))
+        .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
     }
     case 'reader.search': {
