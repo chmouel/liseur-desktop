@@ -612,6 +612,46 @@ describe('SyncService against mock Komga', () => {
     await service.flushQueue()
     expect(repo.queue()).toHaveLength(0)
   })
+
+  it('two servers both fill the shelf, even when their catch-ups collide', async () => {
+    // Credentials for every configured server arrive in the same tick at
+    // startup. If the second catch-up is refused because the first is still
+    // running, that server's books never appear until the next launch.
+    const one = mockKomga()
+    const two = mockKomga()
+    const { service } = makeService(async (url, init) =>
+      new URL(url).port === '9002' ? two.fetch(url, init) : one.fetch(url, init),
+    )
+
+    const a = await service.setupServer({
+      type: 'komga',
+      name: 'One',
+      url: 'http://localhost:9001',
+      secret: 'api-key-1',
+    })
+    const b = await service.setupServer({
+      type: 'komga',
+      name: 'Two',
+      url: 'http://localhost:9002',
+      secret: 'api-key-1',
+    })
+
+    service.catchUp(a.server.id)
+    service.catchUp(b.server.id)
+    await vi.waitFor(() => {
+      expect(one.bookListRequests).toBeGreaterThan(0)
+      expect(two.bookListRequests).toBeGreaterThan(0)
+    })
+
+    const shelved = (serverId: string) =>
+      (
+        db.prepare('SELECT COUNT(*) AS n FROM books WHERE server_id = ?').get(serverId) as {
+          n: number
+        }
+      ).n
+    expect(shelved(a.server.id)).toBeGreaterThan(0)
+    expect(shelved(b.server.id)).toBeGreaterThan(0)
+  })
 })
 
 // Reference the mock helper module (keeps this file focused).

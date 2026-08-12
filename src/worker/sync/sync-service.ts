@@ -70,15 +70,16 @@ export class SyncService {
   private readonly coverQueued = new Set<string>()
   /** Failed tries per book, so retries stop rather than spin. */
   private readonly coverAttempts = new Map<string, number>()
-  /** The sync currently running, so a second request can join it. */
-  private inFlight:
-    | {
-        serverId: string
-        done: Promise<{ added: number; updated: number; error?: string }>
-      }
-    | undefined
-  /** Why the last sync failed. A sync nobody asked for still has to report. */
-  private lastError: string | undefined
+  /** Syncs running or queued, by server, so a second request joins the first. */
+  private readonly inFlight = new Map<
+    string,
+    Promise<{ added: number; updated: number; error?: string }>
+  >()
+  /** Serializes the queued syncs: one server's catalog at a time. */
+  private syncChain: Promise<void> = Promise.resolve()
+  /** Why each server's last sync failed. Kept per server: one server going
+   *  down must not erase the report, nor another's success hide it. */
+  private readonly lastErrors = new Map<string, string>()
 
   constructor(
     private readonly db: DatabaseSync,
@@ -248,19 +249,29 @@ export class SyncService {
    * flight rather than refusing. Adding a server starts a sync in the
    * background, and pressing "Sync now" a second later should wait for it,
    * not report an error at a user who did nothing wrong.
+   *
+   * A request for a DIFFERENT server waits its turn instead of being
+   * refused. Every server's credentials arrive in the same tick at startup,
+   * so refusing the second one meant its books only ever appeared after a
+   * restart — and then only if it happened to go first.
    */
   syncNow(serverId: string): Promise<{ added: number; updated: number; error?: string }> {
-    if (this.inFlight?.serverId === serverId) return this.inFlight.done
+    const running = this.inFlight.get(serverId)
+    if (running) return running
     if (!this.catalogFor(serverId)) {
       return Promise.resolve({ added: 0, updated: 0, error: 'missing credentials' })
     }
-    if (this.syncing) {
-      return Promise.resolve({ added: 0, updated: 0, error: 'sync already running' })
-    }
-    const done = this.runSync(serverId).finally(() => {
-      this.inFlight = undefined
+    // One server at a time: a machine with three servers should not open
+    // three catalogs' worth of connections at once.
+    const done = this.syncChain.then(() => this.runSync(serverId))
+    this.inFlight.set(serverId, done)
+    this.syncChain = done.then(
+      () => {},
+      () => {}, // a failed sync must never wedge the ones behind it
+    )
+    void done.finally(() => {
+      if (this.inFlight.get(serverId) === done) this.inFlight.delete(serverId)
     })
-    this.inFlight = { serverId, done }
     return done
   }
 
@@ -275,7 +286,7 @@ export class SyncService {
     let added = 0
     let updated = 0
     let error: string | undefined
-    this.lastError = undefined
+    this.lastErrors.delete(serverId)
     try {
       for await (const page of catalog.listBooks()) {
         for (const remote of page) {
@@ -297,7 +308,7 @@ export class SyncService {
       this.repository.markSynced(serverId, Date.now())
     } catch (err) {
       error = (err as Error).message
-      this.lastError = error
+      this.lastErrors.set(serverId, error)
       this.log(`sync ${serverId}: ${error}`)
       // A failed pull did not observe the catalog, so the server must not
       // be left claiming it synced.
@@ -946,12 +957,13 @@ export class SyncService {
   // --- state -------------------------------------------------------------------------
 
   state(): SyncState {
+    const [lastError] = this.lastErrors.values()
     return {
       servers: this.repository.listServers().map((s) => this.serverInfo(s)),
       queueSize: this.repository.queueSize(),
-      syncing: this.syncing,
+      syncing: this.syncing || this.inFlight.size > 0,
       conflicts: this.conflicts(),
-      ...(this.lastError ? { lastError: this.lastError } : {}),
+      ...(lastError ? { lastError } : {}),
     }
   }
 
