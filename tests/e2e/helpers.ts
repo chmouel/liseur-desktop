@@ -56,30 +56,50 @@ export async function installBook(
 ): Promise<void> {
   const { app } = await launchApp(dataDir)
   // The library screen paints before the worker has finished preparing the
-  // database, so wait for the table we are about to write to.
+  // database, so wait for the table we are about to write to. The worker may
+  // be holding the write lock while it does, hence the tolerance for a busy
+  // file: the next attempt is 100 ms away.
   const dbPath = join(dataDir, 'liseur.db')
-  const deadline = Date.now() + 20_000
-  for (;;) {
-    if (existsSync(dbPath)) {
-      const probe = new DatabaseSync(dbPath, { readOnly: true })
-      const found = probe
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'folders'")
-        .get()
-      probe.close()
-      if (found) break
+  const hasSchema = (): boolean => {
+    if (!existsSync(dbPath)) return false
+    let probe: DatabaseSync | undefined
+    try {
+      probe = new DatabaseSync(dbPath, { readOnly: true })
+      return (
+        probe
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'folders'")
+          .get() !== undefined
+      )
+    } catch {
+      return false
+    } finally {
+      probe?.close()
     }
+  }
+  const deadline = Date.now() + 20_000
+  while (!hasSchema()) {
     if (Date.now() > deadline) throw new Error('the app never created its database')
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   await app.close()
   writeFileSync(join(booksDir, filename), epub)
-  const db = new DatabaseSync(dbPath)
-  db.prepare('INSERT OR IGNORE INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
-    `folder-${booksDir}`,
-    booksDir,
-    Date.now(),
-  )
-  db.close()
+  // The app has gone but its file handles may take a moment to follow.
+  const writeDeadline = Date.now() + 10_000
+  for (;;) {
+    try {
+      const db = new DatabaseSync(dbPath)
+      db.prepare('INSERT OR IGNORE INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
+        `folder-${booksDir}`,
+        booksDir,
+        Date.now(),
+      )
+      db.close()
+      return
+    } catch (error) {
+      if (Date.now() > writeDeadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
 }
 
 /** Opens a book from the library by title via search + double-click. */
