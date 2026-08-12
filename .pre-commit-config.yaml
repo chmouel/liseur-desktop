@@ -1,0 +1,53 @@
+# What a change has to pass before it leaves this machine, in two passes.
+#
+# Committing runs the checks that answer in a couple of seconds, so the
+# feedback arrives while you still remember what you wrote. Pushing runs
+# those again — a commit made with --no-verify still has to face them — and
+# adds the slower half. Together they are the part of CI that needs neither
+# the network nor a build, which is nearly all of it: what fails on GitHub
+# afterwards should really only be `pnpm build` and the end-to-end suite.
+#
+# Every hook is local. A hook from someone else's repository is code that
+# runs on this machine every time you commit, and this project treats that
+# with the same suspicion as any other dependency (see SECURITY.md).
+
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Formatting
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+      - id: eslint
+        name: Lint
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+      # `it.only` is how a whole test file quietly stops being a test file.
+      - id: no-focused-tests
+        name: No focused tests
+        entry: \b(describe|test|it)\.only\(
+        language: pygrep
+        files: ^tests/.*\.ts$
+        stages: [pre-commit, pre-push]
+
+      - id: typecheck
+        name: Types
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: test
+        name: Unit tests
+        entry: pnpm test
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

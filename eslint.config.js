@@ -11,17 +11,6 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/consistent-type-imports': 'error',
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'electron',
-              message: 'Only main/preload may import electron. Renderer must use window.liseur.',
-            },
-          ],
-        },
-      ],
     },
   },
   {
@@ -37,17 +26,39 @@ export default tseslint.config(
     },
   },
   {
-    // Main, preload and worker are Node-side and may import electron/node.
-    files: [
-      'src/main/**',
-      'src/preload/**',
-      'src/worker/**',
-      'tests/e2e/**',
-      '*.config.ts',
-      'electron.vite.config.ts',
-    ],
+    // The renderer runs in a browser with no Node and no electron: it reaches
+    // the outside world only through the preload API. Shared code is held to
+    // the same rule, because the renderer imports it. Everything else here —
+    // main, preload, worker, tests, scripts — is Node-side and unrestricted.
+    files: ['src/renderer/**', 'src/shared/**'],
     rules: {
-      'no-restricted-imports': 'off',
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message: 'Only main/preload may import electron. Renderer must use window.liseur.',
+            },
+          ],
+          patterns: [
+            {
+              group: [
+                'node:*',
+                'fs',
+                'fs/*',
+                'path',
+                'os',
+                'crypto',
+                'child_process',
+                'worker_threads',
+              ],
+              message:
+                'Only main/preload/worker may use Node builtins. Renderer must use window.liseur.',
+            },
+          ],
+        },
+      ],
     },
   },
 )

@@ -23,13 +23,17 @@ pnpm test:e2e   # Playwright, against the production build
 
 ## Git hooks
 
-Install the pre-push formatting check after cloning:
+Install them after cloning:
 
 ```bash
-pre-commit install --config .pre-commit.yaml --hook-type pre-push
+pre-commit install
 ```
 
-It runs `pnpm format:check` before every push.
+That sets up both hooks the configuration asks for. Committing checks
+formatting, lint and that no test has been left focused with `.only`; pushing
+runs those again and adds the types and the unit tests. It is the half of CI
+that needs neither the network nor a build, so what is left to fail on GitHub
+is `pnpm build` and the end-to-end suite.
 
 ## Adding or updating a dependency
 
