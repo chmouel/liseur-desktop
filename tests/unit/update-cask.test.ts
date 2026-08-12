@@ -5,6 +5,10 @@ import { parseChecksums, updateCask } from '../../scripts/update-cask.mjs'
 
 const cask = readFileSync(new URL('../../Casks/liseur.rb', import.meta.url), 'utf8')
 
+// The release workflow rewrites the version in the cask, so the round-trip
+// test below has to ask the cask what it currently says rather than guess.
+const currentVersion = /^\s*version "([^"]+)"/m.exec(cask)![1]
+
 // Hexadecimal, because a checksum that is not is invisible to the cask.
 const sum = (seed: string) => seed.repeat(64)
 
@@ -49,7 +53,7 @@ describe('updateCask', () => {
 
     // The URL and the AppImage name interpolate the version, so they follow
     // on their own; nothing else in the cask may move.
-    expect(updated.replace(/"[0-9a-f]{64}"/g, '""').replace(/9\.9\.9/g, '0.2.0')).toBe(
+    expect(updated.replace(/"[0-9a-f]{64}"/g, '""').replaceAll('9.9.9', currentVersion)).toBe(
       cask.replace(/"[0-9a-f]{64}"/g, '""'),
     )
   })
