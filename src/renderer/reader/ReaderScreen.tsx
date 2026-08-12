@@ -647,8 +647,6 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   /** Handles keys from the document AND forwarded from inside the book
    *  (iframe key events never cross the boundary). */
   function onKeydown(e: { key: string; preventDefault(): void; target?: unknown }): void {
-    if (!engine) return
-    const target = (e.target ?? {}) as HTMLElement
     // Any key press reveals the chrome (hidden-reading mode is pointer- AND
     // keyboard-dismissable).
     showChrome()
@@ -656,6 +654,10 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     // Escape is layered and always handled, regardless of focus: panels →
     // fullscreen → back to library. (No "blur the input" layer: Escape is
     // the reader's primary exit and must never be swallowed.)
+    //
+    // It is handled BEFORE the engine exists, too. A big book takes a moment
+    // to open, and opening the wrong one used to trap you there with no way
+    // out until it had finished laying itself out.
     if (e.key === 'Escape') {
       e.preventDefault()
       if (
@@ -674,6 +676,9 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
       }
       return
     }
+
+    if (!engine) return
+    const target = (e.target ?? {}) as HTMLElement
 
     if (target.tagName === 'INPUT' && target.classList.contains('reader-scrubber')) {
       // The focused scrubber owns only navigation keys (they adjust the
