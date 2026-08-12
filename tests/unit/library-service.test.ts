@@ -169,4 +169,29 @@ describe('LibraryService.continueReading', () => {
     new BookRepository(empty).insertBooks(none)
     expect(new LibraryService(empty).continueReading()).toBeNull()
   })
+
+  it('follows you to the book you just opened, before you turn a page', () => {
+    // Opening a book is the moment it becomes the book you are reading.
+    // Waiting for a saved position left the previous book on the banner,
+    // and a book opened for the first time has no position to save.
+    const repo = new BookRepository(db)
+    repo.touchOpened('b', 1_000)
+    expect(new LibraryService(db).continueReading()?.id).toBe('b')
+  })
+
+  it('picks up a book you were reading on another device', () => {
+    // Progress arriving from a server counts as reading, even though this
+    // machine never opened the book.
+    const repo = new BookRepository(db)
+    repo.touchOpened('b', 1_000)
+    repo.setProgress('a', { href: 'a.xhtml' }, 0.2, 2_000)
+    expect(new LibraryService(db).continueReading()?.id).toBe('a')
+  })
+
+  it('does not offer a book you have finished or archived', () => {
+    const repo = new BookRepository(db)
+    repo.touchOpened('d', 3_000) // archived
+    repo.touchOpened('c', 4_000) // finished
+    expect(new LibraryService(db).continueReading()?.id).toBe('e')
+  })
 })

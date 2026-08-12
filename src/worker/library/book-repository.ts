@@ -124,13 +124,24 @@ export class BookRepository {
   }
 
   /** The single most recently updated in-progress book. */
+  /**
+   * The book to offer on the "Continue reading" banner.
+   *
+   * Reading activity is the later of "opened on this machine" and "position
+   * changed", so a book opened seconds ago wins over the one you finished
+   * with yesterday, and a book you got through on your phone still shows up
+   * here once its progress syncs across. Sorting on the saved position
+   * alone left the previous book on the banner, because a book opened for
+   * the first time has no position to sort by yet.
+   */
   continueReading(): Book | null {
     const row = this.db
       .prepare(
         `${BOOK_SELECT}
          WHERE b.finished = 0 AND b.archived = 0
-           AND p.progression IS NOT NULL AND p.progression < 1
-         ORDER BY p.updated_at DESC, b.id
+           AND (b.last_opened_at IS NOT NULL OR p.progression IS NOT NULL)
+           AND (p.progression IS NULL OR p.progression < 1)
+         ORDER BY MAX(COALESCE(b.last_opened_at, 0), COALESCE(p.updated_at, 0)) DESC, b.id
          LIMIT 1`,
       )
       .get() as unknown as BookRow | undefined
