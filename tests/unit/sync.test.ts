@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { openDatabase, migrate } from '../../src/worker/db/database'
 import { MIGRATIONS } from '../../src/worker/db/migrations'
 import { reconcileProgress } from '../../src/worker/sync/reconcile'
-import { parseOpdsFeed } from '../../src/worker/sync/calibre'
+import { CalibreCatalog, parseOpdsFeed } from '../../src/worker/sync/calibre'
 import { KomgaCatalog } from '../../src/worker/sync/komga'
 import { SyncRepository } from '../../src/worker/sync/sync-repository'
 import { BookRepository } from '../../src/worker/library/book-repository'
@@ -386,6 +386,18 @@ describe('SyncService against mock Komga', () => {
     // visible to someone who never pressed a button.
     expect(new SyncRepository(db).listServers()[0]?.lastSyncAt).toBeUndefined()
     expect(service.state().lastError).toContain('400')
+  })
+
+  it('a refused OPDS feed fails the sync instead of emptying the shelf', async () => {
+    const catalog = new CalibreCatalog(
+      { id: 's1', type: 'calibre-web', name: 'C', url: 'http://calibre.test', addedAt: 0 },
+      {},
+      undefined,
+      () => Promise.resolve(new Response('nope', { status: 500 })),
+    )
+    await expect(async () => {
+      for await (const _page of catalog.listBooks()) void _page
+    }).rejects.toThrow(/500/)
   })
 
   it('komga listBooks parses pages via the catalog client', async () => {

@@ -144,7 +144,11 @@ export class CalibreCatalog implements RemoteCatalog {
     let pages = 0
     while (path && pages++ < MAX_PAGES) {
       const res = await this.http.request('GET', path)
-      if (!res.ok || !res.value) return
+      // Treating a refused feed as an empty one hides a broken server
+      // behind a library that simply looks empty.
+      if (!res.ok || !res.value) {
+        throw new Error(res.error ?? `catalog listing failed: HTTP ${res.status}`)
+      }
       const { entries, nextHref } = parseOpdsFeed(await res.value.text())
       const books = entries.map(entryToBook).filter((b): b is RemoteBook => b !== null)
       if (books.length > 0) yield books
