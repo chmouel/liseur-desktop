@@ -1,8 +1,9 @@
 # AGENTS.md — Engineering constraints for coding agents
 
 You are working on **Liseur Desktop**, a desktop EPUB reader whose defining
-quality is **snappiness**. Read this file and [DESIGN.md](DESIGN.md) before
-changing anything, and keep DESIGN.md updated as the design changes.
+quality is **snappiness**. Read this file and
+[docs/DESIGN.md](docs/DESIGN.md) before changing anything, and keep
+docs/DESIGN.md updated as the design changes.
 
 ## Non-negotiable rules
 
@@ -24,7 +25,7 @@ changing anything, and keep DESIGN.md updated as the design changes.
     instrumentation (`localStorage.liseurPerf = '1'`).
 11. Do not add dependencies casually. Check: does a browser/Node API already
     solve it? Is it maintained? How big is it? Does it run at startup?
-    Document performance-sensitive additions in PERFORMANCE.md. A dependency
+    Document performance-sensitive additions in docs/PERFORMANCE.md. A dependency
     is also a supply-chain liability: it must be installable under the
     fourteen-day cooldown in `pnpm-workspace.yaml`, must not need an install
     script (adding a name to `allowBuilds` requires a written justification in

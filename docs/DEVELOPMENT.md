@@ -69,7 +69,7 @@ LISEUR_SEED_FAKE_LIBRARY=1 pnpm dev
 ```
 
 To watch where the time goes, set `localStorage.liseurPerf = '1'` in DevTools.
-See [PERFORMANCE.md](../PERFORMANCE.md).
+See [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Working with a throwaway library
 
@@ -97,5 +97,5 @@ tests/
 ```
 
 Which process may do what is not a matter of taste; see
-[ARCHITECTURE.md](../ARCHITECTURE.md) for the boundaries and
+[ARCHITECTURE.md](ARCHITECTURE.md) for the boundaries and
 [AGENTS.md](../AGENTS.md) for the rules that come with them.

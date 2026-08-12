@@ -17,7 +17,7 @@ The first is handled by architecture. Books are parsed in a separate worker
 process, never in the window that shows them; the renderer has no access to
 the filesystem, to Node, or to Electron, and reaches data only through a
 narrow typed bridge that exposes named operations rather than a general
-channel. [ARCHITECTURE.md](ARCHITECTURE.md) has the detail.
+channel. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the detail.
 
 The rest of this document is about the second.
 
