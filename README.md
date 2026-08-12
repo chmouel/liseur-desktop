@@ -48,6 +48,16 @@ pnpm test       # Vitest unit tests
 pnpm test:e2e   # Playwright tests against the production build
 ```
 
+The e2e suite opens real application windows, which steal focus while they
+run. To keep them off your screen, run them inside a headless compositor:
+
+```bash
+printf 'output HEADLESS-1 mode 1600x1000\n' > /tmp/sway-headless.conf
+WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -c /tmp/sway-headless.conf &
+# sway prints its socket name; use it below (wayland-2 here)
+env -u DISPLAY WAYLAND_DISPLAY=wayland-2 pnpm test:e2e
+```
+
 ## Architecture
 
 Three strictly separated process layers:
