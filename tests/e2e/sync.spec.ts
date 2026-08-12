@@ -16,7 +16,14 @@ let dataDir: string
 let app: ElectronApplication | undefined
 let server: Server
 let baseUrl: string
+let thumbnailRequests = 0
 const progressPushes: { locator?: { href?: string }; device?: { id?: string } }[] = []
+
+/** A 1x1 PNG — enough for Chromium to decode and for the cache to store. */
+const THUMBNAIL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 test.beforeAll(async () => {
   ;({ dataDir } = makeTempDirs())
@@ -54,7 +61,8 @@ test.beforeAll(async () => {
       return
     }
     if (url.pathname === '/api/v1/books/komga-1/thumbnail') {
-      res.writeHead(404).end()
+      thumbnailRequests++
+      res.writeHead(200, { 'content-type': 'image/png' }).end(THUMBNAIL_PNG)
       return
     }
     if (url.pathname === '/api/v1/books/komga-1/progression') {
@@ -119,6 +127,18 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   await expect(card).toBeVisible({ timeout: 15_000 })
   await expect(card.locator('.badge-server')).toBeVisible()
   await expect(card.locator('.badge-downloaded')).not.toBeVisible()
+
+  // --- the server's cover art turns up on the card ------------------------------
+  // Fetched lazily, per card, and cached: the grid shows the publisher's
+  // cover rather than a generated placeholder.
+  await expect(card.locator('.book-cover')).toHaveAttribute('src', /^liseur-cover:/, {
+    timeout: 15_000,
+  })
+  const cover = card.locator('.book-cover')
+  await expect
+    .poll(() => cover.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 10_000 })
+    .toBeGreaterThan(0)
+  expect(thumbnailRequests).toBeGreaterThan(0)
 
   // --- open downloads it on demand ---------------------------------------------
   await card.dblclick()

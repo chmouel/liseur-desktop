@@ -55,6 +55,8 @@ export class SyncService {
   private flushTimer: ReturnType<typeof setTimeout> | undefined
   /** Servers whose catalog has already been pulled in this process. */
   private readonly caughtUp = new Set<string>()
+  /** Cover fetches in flight, so scrolling cannot stampede one book. */
+  private readonly coversInFlight = new Set<string>()
   /** The sync currently running, so a second request can join it. */
   private inFlight:
     | {
@@ -557,6 +559,53 @@ export class SyncService {
     })
     this.deps.onBookUpdated(updated)
     return updated
+  }
+
+  // --- covers -------------------------------------------------------------------
+
+  /**
+   * Fetches and caches one remote book's cover, on demand.
+   *
+   * Catalog sync deliberately does not do this: a Komga library of a few
+   * thousand books would mean a few thousand image requests for art nobody
+   * has scrolled to yet. The renderer asks per card as it comes into view,
+   * and the cached cover arrives as a bookUpdated event.
+   */
+  async ensureCover(bookId: string): Promise<void> {
+    const book = this.books.getById(bookId)
+    if (!book?.remoteId || !book.serverId || book.coverId) return
+    if (this.coversInFlight.has(bookId)) return
+    const catalog = this.catalogFor(book.serverId)
+    if (!catalog) return
+    const coverUrl =
+      this.repository.remoteUrls(bookId).coverUrl ?? coverUrlFor(catalog, book.remoteId)
+    if (!coverUrl) return
+
+    this.coversInFlight.add(bookId)
+    try {
+      const bytes = await catalog.fetchCover({
+        remoteId: book.remoteId,
+        title: book.title,
+        authors: book.authors,
+        downloadUrl: '',
+        coverUrl,
+      })
+      if (!bytes) return
+      const coverId = storeCoverBytes(this.dataDir, bytes)
+      if (!coverId) return
+      // Re-read: a download may have landed a cover while this was in the
+      // air, and the downloaded one is the better of the two.
+      const fresh = this.books.getById(bookId)
+      if (!fresh || fresh.coverId) return
+      this.books.setCoverId(bookId, coverId)
+      const updated = this.books.getById(bookId)
+      if (updated) this.deps.onBookUpdated(updated)
+    } catch {
+      // A cover is decoration; a server that will not serve one is not an
+      // error worth surfacing.
+    } finally {
+      this.coversInFlight.delete(bookId)
+    }
   }
 
   // --- progress queue -------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onCleanup, onMount, For, type JSX } from 'solid-js'
 import type { Book } from '@shared/domain/types'
-import { coverFor } from './covers'
+import { coverFor, requestRemoteCover } from './covers'
 import { computeColumns, computeRange } from './virtualize'
 
 /**
@@ -92,6 +92,10 @@ export function VirtualBookGrid(props: Props): JSX.Element {
           <For each={visible()}>
             {(book, localIndex) => {
               const index = () => range().start + localIndex()
+              // Books that live on a server arrive with no cover art. Ask
+              // for it as the card is mounted, which virtualization already
+              // means is roughly "as it comes into view".
+              requestRemoteCover(book)
               return (
                 <button
                   type="button"

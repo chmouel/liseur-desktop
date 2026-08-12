@@ -35,6 +35,24 @@ function initials(title: string): string {
 }
 
 const cache = new Map<string, string>()
+const coverRequested = new Set<string>()
+
+/**
+ * Asks the worker to fetch a server book's cover art, once per book per
+ * session. Catalog sync leaves these blank on purpose — a library of a few
+ * thousand books would otherwise mean a few thousand image requests for
+ * covers nobody has scrolled to. The fetched cover comes back as a
+ * bookUpdated event and the card re-renders with it.
+ */
+export function requestRemoteCover(book: {
+  id: string
+  coverId?: string
+  remoteId?: string
+}): void {
+  if (book.coverId || !book.remoteId || coverRequested.has(book.id)) return
+  coverRequested.add(book.id)
+  window.liseur.sync.ensureCover(book.id)
+}
 
 export function coverFor(book: { id: string; title: string; coverId?: string }): string {
   // Real covers aren't cached client-side: the URL is cheap to compute and

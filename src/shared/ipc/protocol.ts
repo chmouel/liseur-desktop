@@ -106,6 +106,7 @@ export type WorkerRequest =
    * event rather than a response: the renderer fires these per card as the
    * grid scrolls and does not wait on any of them.
    */
+  | { kind: 'sync.ensureCover'; id: number; bookId: string }
   | { kind: 'sync.getState'; id: number }
   | {
       kind: 'sync.resolveConflict'

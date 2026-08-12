@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDatabase, migrate } from '../../src/worker/db/database'
@@ -286,6 +286,41 @@ describe('SyncService against mock Komga', () => {
     service.catchUp(server.id)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(komga.bookListRequests).toBe(listsBefore)
+  })
+
+  it('a catalog book gets its cover only when something asks for it', async () => {
+    const komga = mockKomga()
+    const { service, events } = makeService(komga.fetch)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const shell = repo.findByRemoteId(server.id, 'book-1')!
+    // Sync leaves the art alone: a few thousand books must not mean a few
+    // thousand image requests for covers nobody has scrolled to.
+    expect(books.getById(shell.id)?.coverId).toBeUndefined()
+
+    await service.ensureCover(shell.id)
+    const coverId = books.getById(shell.id)?.coverId
+    expect(coverId).toBeDefined()
+    expect(existsSync(join(dataDir, 'covers', coverId!))).toBe(true)
+    expect(events.updated).toContain(shell.id)
+
+    // Already cached: asking again is a no-op, not a second fetch.
+    const updatesBefore = events.updated.length
+    await service.ensureCover(shell.id)
+    expect(events.updated).toHaveLength(updatesBefore)
+
+    // A server with no art for a book is not an error.
+    const noArt = repo.findByRemoteId(server.id, 'book-2')!
+    await service.ensureCover(noArt.id)
+    expect(books.getById(noArt.id)?.coverId).toBeUndefined()
   })
 
   it('komga listBooks parses pages via the catalog client', async () => {

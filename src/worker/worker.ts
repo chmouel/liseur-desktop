@@ -207,6 +207,9 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
     case 'reader.searchCancel':
       cancelSearchOn(port, request.id)
       break
+    case 'sync.ensureCover':
+      void sync.ensureCover(request.bookId)
+      break
     case 'sync.setupServer':
       void sync
         .setupServer(request.input)

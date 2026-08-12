@@ -80,6 +80,12 @@ async function request<T extends WorkerMessage>(
   })
 }
 
+/** Fire-and-forget: the worker answers with an event, or not at all. */
+async function notify(build: (id: number) => WorkerRequest): Promise<void> {
+  const port = await getWorkerPort()
+  port.postMessage(build(nextId++))
+}
+
 const api = {
   library: {
     query(query: LibraryQuery): Promise<LibraryQueryResult> {
@@ -274,6 +280,14 @@ const api = {
         (m): m is Extract<WorkerMessage, { kind: 'sync.download.result' }> =>
           m.kind === 'sync.download.result',
       ).then((r) => r.book)
+    },
+    /**
+     * Asks for a catalog book's cover. Deliberately returns nothing: the
+     * cached cover arrives as a bookUpdated event, so a grid scrolling past
+     * fifty cards never holds fifty promises open.
+     */
+    ensureCover(bookId: string): void {
+      void notify((id) => ({ kind: 'sync.ensureCover', id, bookId }))
     },
     getState(): Promise<SyncState> {
       return request(

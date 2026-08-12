@@ -149,6 +149,11 @@ export class BookRepository {
     return row.n
   }
 
+  /** Attaches a cached cover to a book that had none. */
+  setCoverId(id: string, coverId: string): void {
+    this.db.prepare('UPDATE books SET cover_id = ? WHERE id = ?').run(coverId, id)
+  }
+
   countByFolder(folderId: string): number {
     const row = this.db
       .prepare('SELECT COUNT(*) AS n FROM books WHERE folder_id = ?')
