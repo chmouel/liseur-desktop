@@ -1,0 +1,57 @@
+# Dependency updates arrive on a schedule, in batches, from a bot — which is
+# less about convenience than about attention. Updates that trickle in one at a
+# time get rubber-stamped; a weekly handful gets read.
+#
+# The npm cooldown below matches minimumReleaseAge in pnpm-workspace.yaml, so
+# no pull request is ever opened for a version that pnpm would then refuse to
+# install.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      # The things that check the code. They move together, they break
+      # together, and reviewing them one at a time teaches nothing.
+      dev-tooling:
+        patterns:
+          - eslint
+          - '@eslint/*'
+          - typescript-eslint
+          - typescript
+          - prettier
+          - vitest
+          - '@types/*'
+      # The things that build the code.
+      build-tooling:
+        patterns:
+          - vite
+          - electron-vite
+          - vite-plugin-solid
+          - electron-builder
+    # electron, solid-js and @playwright/test are deliberately left ungrouped:
+    # each one changes what the application does or how it is tested, and each
+    # deserves its own pull request and its own read.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns:
+          - '*'
+    # This is what keeps the commit pins in the workflows from going stale.
+    # Dependabot rewrites both the SHA and the version comment beside it.
