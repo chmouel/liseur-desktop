@@ -10,22 +10,21 @@ them.
 
 ## Install
 
-Builds for Linux and macOS are attached to every
-[release](https://github.com/chmouel/liseur-desktop/releases).
+Every [release](https://github.com/chmouel/liseur-desktop/releases) has builds
+for Linux and macOS attached.
 
-**Arch Linux** — `liseur-desktop-bin` is in the AUR:
+On Arch Linux, `liseur-desktop-bin` is in the AUR:
 
 ```
 paru -S liseur-desktop-bin
 ```
 
-**Other Linux** — take the `.AppImage`, make it executable and run it, or
-install the `.deb` on Debian and Ubuntu. Both Intel and ARM machines are
-covered.
+On other Linux, take the `.AppImage`, make it executable and run it, or install
+the `.deb` on Debian and Ubuntu. There are builds for both Intel and ARM.
 
-**macOS** — take the `.dmg` matching your Mac (`arm64` for Apple silicon,
-`x64` for Intel). The build is not signed, so the first launch needs the
-quarantine flag cleared:
+On macOS, take the `.dmg` matching your Mac (`arm64` for Apple silicon, `x64`
+for Intel). The build is not signed, so clear the quarantine flag before the
+first launch:
 
 ```
 xattr -dr com.apple.quarantine /Applications/Liseur.app
