@@ -201,7 +201,13 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
             aria-label="Reading statistics"
             title="Reading statistics"
           >
-            ▥
+            {/* Drawn rather than typed: no character in a UI font reads as
+                a chart at this size, and the box ones look like a blank. */}
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <rect x="4" y="13" width="4" height="7" rx="1" fill="currentColor" />
+              <rect x="10" y="8" width="4" height="12" rx="1" fill="currentColor" />
+              <rect x="16" y="4" width="4" height="16" rx="1" fill="currentColor" />
+            </svg>
           </button>
           <button
             type="button"
