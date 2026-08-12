@@ -674,6 +674,51 @@ describe('SyncService against mock Komga', () => {
     expect(progressRequests).toBe(2) // still only the one read book
   })
 
+  it('a window left open picks up books added to the server later', async () => {
+    // The catalog was pulled once per process, so a book added on the
+    // server never showed up until the app was restarted.
+    const titles = ['Book One']
+    let listings = 0
+    const fetchImpl: FetchLike = async (url) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        listings++
+        return jsonResponse({
+          content: titles.map((title, i) => ({
+            id: `book-${i}`,
+            name: title,
+            metadata: { title, authors: [] },
+            media: { pagesCount: 100 },
+          })),
+          last: true,
+        })
+      }
+      return jsonResponse({}, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+    const repo = new SyncRepository(db)
+    expect(repo.findByRemoteId(server.id, 'book-1')).toBeUndefined()
+
+    // Coming back to a window that synced a second ago costs nothing.
+    await service.refreshStale()
+    expect(listings).toBe(1)
+
+    // Coming back after a long time away picks up what appeared meanwhile.
+    titles.push('Book Two')
+    await service.refreshStale(0)
+    expect(listings).toBe(2)
+    expect(repo.findByRemoteId(server.id, 'book-1')?.title).toBe('Book Two')
+  })
+
   it('two servers both fill the shelf, even when their catch-ups collide', async () => {
     // Credentials for every configured server arrive in the same tick at
     // startup. If the second catch-up is refused because the first is still

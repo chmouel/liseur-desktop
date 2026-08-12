@@ -274,6 +274,13 @@ const api = {
         ...(r.error ? { error: r.error } : {}),
       }))
     },
+    refreshStale(): Promise<void> {
+      return request(
+        (id) => ({ kind: 'sync.refreshStale', id }),
+        (m): m is Extract<WorkerMessage, { kind: 'sync.refreshStale.result' }> =>
+          m.kind === 'sync.refreshStale.result',
+      ).then(() => undefined)
+    },
     download(bookId: string): Promise<Book | null> {
       return request(
         (id) => ({ kind: 'sync.download', id, bookId }),

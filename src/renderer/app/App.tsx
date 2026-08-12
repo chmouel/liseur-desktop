@@ -6,6 +6,26 @@ import { ReaderScreen } from '../reader/ReaderScreen'
 import { observeLongTasks, perf } from '../perf/perf'
 
 /**
+ * Ask the worker for anything new on the servers when the window comes back
+ * to the front. Books added to a server used to appear only after a
+ * restart, because the catalog was pulled once at startup.
+ *
+ * Coming back to the window is the moment a person is about to look at the
+ * shelf, so it is the moment worth spending a request on. An idle app in
+ * the background does nothing at all — no timer, nothing to wake the
+ * machine — and the worker ignores a server it synced recently, so
+ * flicking between windows is free.
+ */
+function watchForNewServerBooks(): void {
+  const refresh = (): void => {
+    if (document.visibilityState === 'hidden') return
+    void window.liseur.sync.refreshStale().catch(() => {})
+  }
+  window.addEventListener('focus', refresh)
+  document.addEventListener('visibilitychange', refresh)
+}
+
+/**
  * Application shell. Renders immediately — the library streams in
  * asynchronously from the worker, so first paint is never blocked on data.
  * View switching is a plain signal: library or reader (a book id).
@@ -19,6 +39,7 @@ export function App(): JSX.Element {
     initTheme()
     initLibrary()
     observeLongTasks()
+    watchForNewServerBooks()
     done()
   })
 

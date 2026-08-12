@@ -102,6 +102,12 @@ export type WorkerRequest =
   | { kind: 'sync.removeServer'; id: number; serverId: string }
   | { kind: 'sync.testConnection'; id: number; serverId: string }
   | { kind: 'sync.syncNow'; id: number; serverId: string }
+  /**
+   * Sync any server whose catalog has gone stale. Sent when the window
+   * regains focus so a long-running window still sees new server books;
+   * the worker decides what counts as stale, so this is cheap to send.
+   */
+  | { kind: 'sync.refreshStale'; id: number }
   | { kind: 'sync.download'; id: number; bookId: string }
   /**
    * Fetch and cache one catalog book's cover. Answered by a bookUpdated
@@ -138,6 +144,7 @@ export type WorkerResponse =
   | { kind: 'sync.removeServer.result'; id: number }
   | { kind: 'sync.testConnection.result'; id: number; ok: boolean; detail?: string }
   | { kind: 'sync.syncNow.result'; id: number; added: number; updated: number; error?: string }
+  | { kind: 'sync.refreshStale.result'; id: number }
   | { kind: 'sync.download.result'; id: number; book: Book | null }
   | { kind: 'sync.getState.result'; id: number; state: SyncState }
   | { kind: 'sync.resolveConflict.result'; id: number }

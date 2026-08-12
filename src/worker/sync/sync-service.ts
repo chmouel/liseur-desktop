@@ -33,6 +33,14 @@ const MAX_COVER_FETCHES = 4
 /** Tries per cover before giving up, so a flaky moment is not permanent. */
 const COVER_ATTEMPTS = 3
 
+/**
+ * How old a catalog has to be before returning to the window re-pulls it.
+ * Long enough that alt-tabbing costs nothing, short enough that a book put
+ * on the server over lunch is there when you come back. The env override
+ * exists so the end-to-end test can watch a refresh happen.
+ */
+const STALE_CATALOG_MS = Number(process.env['LISEUR_SYNC_STALE_MS'] ?? 15 * 60_000)
+
 export interface SyncDeps {
   onBookAdded: (book: Book) => void
   onBookUpdated: (book: Book) => void
@@ -273,6 +281,24 @@ export class SyncService {
       if (this.inFlight.get(serverId) === done) this.inFlight.delete(serverId)
     })
     return done
+  }
+
+  /**
+   * Sync every server whose catalog has gone stale.
+   *
+   * A window left open for days would otherwise never see a book added on
+   * the server, because the catalog is pulled once at startup. The renderer
+   * calls this when the window regains focus, so there is no timer ticking
+   * in an idle app. The age check lives here rather than in the renderer:
+   * flicking between windows should cost nothing.
+   */
+  async refreshStale(maxAgeMs = STALE_CATALOG_MS): Promise<void> {
+    const now = Date.now()
+    for (const server of this.repository.listServers()) {
+      if (!this.credentials.has(server.id)) continue
+      if (server.lastSyncAt !== undefined && now - server.lastSyncAt < maxAgeMs) continue
+      await this.syncNow(server.id)
+    }
   }
 
   private async runSync(

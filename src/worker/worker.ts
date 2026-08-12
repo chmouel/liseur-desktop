@@ -254,6 +254,12 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
         )
         .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
+    case 'sync.refreshStale':
+      void sync
+        .refreshStale()
+        .then(() => send(port, { kind: 'sync.refreshStale.result', id: request.id }))
+        .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
+      break
     case 'sync.download':
       void sync
         .downloadBook(request.bookId)

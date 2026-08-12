@@ -27,6 +27,8 @@ let server: Server
 let baseUrl: string
 let thumbnailRequests = 0
 const progressPushes: { locator?: { href?: string }; device?: { id?: string } }[] = []
+/** What the mock server currently has on its shelf; the test adds to it. */
+let catalog: Record<string, unknown>[] = []
 
 /** A 1x1 PNG — enough for Chromium to decode and for the cache to store. */
 const THUMBNAIL_PNG = Buffer.from(
@@ -37,6 +39,16 @@ const THUMBNAIL_PNG = Buffer.from(
 test.beforeAll(async () => {
   ;({ dataDir } = makeTempDirs())
   const epub = buildReaderEpub({ chapters: 2 })
+
+  catalog = [
+    {
+      id: 'komga-1',
+      name: 'The Remote Tome',
+      sizeBytes: epub.length,
+      metadata: { title: 'The Remote Tome', authors: [{ name: 'Kay Ohm' }] },
+      media: { pagesCount: 10 },
+    },
+  ]
 
   server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
@@ -69,15 +81,7 @@ test.beforeAll(async () => {
         }
         res.end(
           JSON.stringify({
-            content: [
-              {
-                id: 'komga-1',
-                name: 'The Remote Tome',
-                sizeBytes: epub.length,
-                metadata: { title: 'The Remote Tome', authors: [{ name: 'Kay Ohm' }] },
-                media: { pagesCount: 10 },
-              },
-            ],
+            content: catalog,
             last: true,
           }),
         )
@@ -123,6 +127,9 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   // The e2e environment has no OS keychain; the test-only escape hatch keeps
   // the credential path exercisable (still never in SQLite).
   process.env.LISEUR_ALLOW_INSECURE_SECRETS = '1'
+  // Treat the catalog as stale immediately, so the refresh-on-focus below
+  // is observable without the test sitting idle for fifteen minutes.
+  process.env.LISEUR_SYNC_STALE_MS = '0'
   ;({ app } = await launchApp(dataDir))
   const page = await app.firstWindow()
   await page.waitForSelector('.library-screen')
@@ -185,4 +192,21 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   await page.waitForSelector('.library-screen')
   // Search is still filtering to the book; the badge updates in place.
   await expect(card.locator('.badge-downloaded')).toBeVisible({ timeout: 10_000 })
+
+  // --- a book added to the server later turns up too ---------------------------
+  // The catalog used to be pulled once per process, so a shelf left open
+  // never grew. Coming back to the window asks the server again.
+  catalog.push({
+    id: 'komga-2',
+    name: 'The Latecomer',
+    sizeBytes: 1024,
+    metadata: { title: 'The Latecomer', authors: [{ name: 'Kay Ohm' }] },
+    media: { pagesCount: 10 },
+  })
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await page.getByRole('button', { name: 'Search' }).click()
+  await page.locator('.search-input').fill('Latecomer')
+  await expect(page.getByRole('gridcell', { name: /The Latecomer/ })).toBeVisible({
+    timeout: 15_000,
+  })
 })
