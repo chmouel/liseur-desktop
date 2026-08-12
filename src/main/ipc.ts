@@ -71,7 +71,7 @@ export function setupIpc(): void {
     // Merge: a patch only replaces the keys it carries.
     const settings: Settings = {
       theme: patch.theme ?? current.settings?.theme ?? 'system',
-      resumeLastBook: patch.resumeLastBook ?? current.settings?.resumeLastBook ?? true,
+      resumeLastBook: patch.resumeLastBook ?? current.settings?.resumeLastBook ?? false,
       ...((patch.reader ?? current.settings?.reader)
         ? { reader: patch.reader ?? current.settings?.reader }
         : {}),
