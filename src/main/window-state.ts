@@ -25,6 +25,7 @@ interface PersistedState {
   settings?: {
     theme?: 'system' | 'light' | 'dark'
     resumeLastBook?: boolean
+    vimMode?: boolean
     // Structural duplication drifted once already: reuse the shared type
     // so a new preference cannot be silently dropped on the way to disk.
     reader?: ReaderPreferences | undefined

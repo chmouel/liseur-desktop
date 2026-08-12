@@ -44,6 +44,26 @@ Library UX conventions carried over from Android:
 - Continue Reading card: cover + label + title + author + progress bar + percent
 - Book card: cover + badges (download/server/finished) + title + author
 
+## Vim mode
+
+An optional keyboard grammar for people who already have one in their
+fingers, off until Settings turns it on. It is strictly additive: arrows,
+space, PageUp/PageDown, Escape, F11 and the menu accelerators behave the
+same whether it is on or off, because a vim key is only claimed when it is
+bound and nothing else answers to it.
+
+- `src/renderer/vim/keymap.ts` is pure and testable: it encodes a key event
+  as a token, runs the count + multi-key state machine (`2j`, `10G`, `]]`),
+  and holds the two binding tables. Everything else — the screens, the `?`
+  sheet, the tests — reads those tables, so the keys cannot drift from
+  their own documentation.
+- `src/renderer/vim/vim.ts` is the reactive glue: the setting signal and a
+  per-screen session that tracks the pending sequence, forgets it after
+  1.2 s, and never intercepts a keystroke aimed at a text field.
+- Escape belongs to the app, not to vim: it drops a half-typed sequence if
+  there is one, otherwise it closes what is open and finally leaves the
+  book. `q` steps out the same way.
+
 ## Architecture summary
 
 Three strictly separated layers (details in `ARCHITECTURE.md`):

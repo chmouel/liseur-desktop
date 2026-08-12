@@ -6,6 +6,10 @@ import { ContinueReading } from './ContinueReading'
 import { SettingsScreen } from '../settings/SettingsScreen'
 import { StatsScreen } from '../stats/StatsScreen'
 import { useTheme } from '../app/theme'
+import { computeColumns, GRID_CARD_WIDTH, GRID_GAP, GRID_ROW_HEIGHT } from './virtualize'
+import { createVimSession, times, vimMode } from '../vim/vim'
+import { LIBRARY_BINDINGS, type LibraryCommand } from '../vim/keymap'
+import { VimHelp, VimPending } from '../vim/VimHelp'
 import brandTile from '../assets/brand-tile.webp'
 import brandTileDark from '../assets/brand-tile-dark.webp'
 
@@ -25,8 +29,10 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   const [settingsOpen, setSettingsOpen] = createSignal(false)
   const [statsOpen, setStatsOpen] = createSignal(false)
   const [sortMenuOpen, setSortMenuOpen] = createSignal(false)
+  const [helpOpen, setHelpOpen] = createSignal(false)
   let searchInput: HTMLInputElement | undefined
   let gridEl: HTMLDivElement | undefined
+  const vim = createVimSession<LibraryCommand>(LIBRARY_BINDINGS)
 
   // Chips a library has nothing to say with are left off rather than shown
   // inert: with no server every book is downloaded, and with nothing put
@@ -73,14 +79,32 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
     const inField =
       target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
     if (inField) return
+    if (helpOpen()) {
+      // While the sheet is up it owns the keyboard: it is a list of keys, so
+      // acting on one behind it would be a trap.
+      if (e.key === 'Escape' || e.key === 'q' || e.key === '?') {
+        e.preventDefault()
+        setHelpOpen(false)
+      }
+      return
+    }
     if (settingsOpen()) {
-      if (e.key === 'Escape') setSettingsOpen(false)
+      if (e.key === 'Escape' || (vimMode() && e.key === 'q')) setSettingsOpen(false)
+      return
+    }
+    if (statsOpen()) {
+      if (e.key === 'Escape' || (vimMode() && e.key === 'q')) setStatsOpen(false)
       return
     }
     if (sortMenuOpen() && e.key === 'Escape') {
       setSortMenuOpen(false)
       return
     }
+
+    // Vim keys go first and only claim what they are bound to; everything
+    // else — arrows, Enter, Escape, the menu chords — falls through
+    // untouched, exactly as it behaves with vim mode off.
+    if (vim.handle(e, runVimCommand)) return
 
     if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
       e.preventDefault()
@@ -95,7 +119,6 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
 
     const count = store.books().length
     if (count === 0) return
-    const columns = gridEl ? Math.max(1, Math.floor((gridEl.clientWidth + 20) / (128 + 20))) : 1
 
     switch (e.key) {
       case 'ArrowRight':
@@ -105,10 +128,10 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         setSelectedIndex((i) => Math.max(0, i - 1))
         break
       case 'ArrowDown':
-        setSelectedIndex((i) => Math.min(count - 1, i + columns))
+        setSelectedIndex((i) => Math.min(count - 1, i + gridColumns()))
         break
       case 'ArrowUp':
-        setSelectedIndex((i) => Math.max(0, i - columns))
+        setSelectedIndex((i) => Math.max(0, i - gridColumns()))
         break
       case 'Enter':
         if (selectedIndex() >= 0) openBook(selectedIndex())
@@ -117,6 +140,121 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         return
     }
     e.preventDefault()
+  }
+
+  // --- vim mode ------------------------------------------------------------
+
+  /** The grid's own column arithmetic, so the keyboard and the layout agree. */
+  const gridColumns = () =>
+    gridEl ? computeColumns(gridEl.clientWidth, GRID_CARD_WIDTH, GRID_GAP) : 1
+
+  /** Whole rows that fit on screen — what a screenful means to the keyboard. */
+  const gridRows = () =>
+    gridEl ? Math.max(1, Math.floor(gridEl.clientHeight / GRID_ROW_HEIGHT)) : 1
+
+  /** Moves the selection, landing on the first book when nothing is picked. */
+  const moveSelection = (delta: number) => {
+    const count = store.books().length
+    if (count === 0) return
+    setSelectedIndex((i) => (i < 0 ? 0 : Math.min(count - 1, Math.max(0, i + delta))))
+  }
+
+  const cycle = <T,>(values: readonly T[], current: T, delta: number): T | undefined => {
+    if (values.length === 0) return undefined
+    const index = values.indexOf(current)
+    return values[
+      ((((index === -1 ? 0 : index) + delta) % values.length) + values.length) % values.length
+    ]
+  }
+
+  function runVimCommand(command: LibraryCommand, count: number | null): void {
+    const books = store.books()
+    switch (command) {
+      case 'left':
+        times(count, () => moveSelection(-1))
+        break
+      case 'right':
+        times(count, () => moveSelection(1))
+        break
+      case 'down':
+        times(count, () => moveSelection(gridColumns()))
+        break
+      case 'up':
+        times(count, () => moveSelection(-gridColumns()))
+        break
+      case 'rowStart':
+        if (selectedIndex() >= 0) setSelectedIndex((i) => i - (i % gridColumns()))
+        break
+      case 'rowEnd':
+        if (selectedIndex() >= 0) {
+          setSelectedIndex((i) =>
+            Math.min(books.length - 1, i - (i % gridColumns()) + gridColumns() - 1),
+          )
+        }
+        break
+      case 'first':
+        if (books.length > 0) setSelectedIndex(0)
+        break
+      case 'last':
+        // `12G` is the twelfth book, as `12G` is the twelfth line.
+        if (books.length > 0) {
+          setSelectedIndex(count === null ? books.length - 1 : Math.min(books.length, count) - 1)
+        }
+        break
+      case 'halfPageDown':
+        moveSelection(gridColumns() * Math.max(1, Math.floor(gridRows() / 2)))
+        break
+      case 'halfPageUp':
+        moveSelection(-gridColumns() * Math.max(1, Math.floor(gridRows() / 2)))
+        break
+      case 'open':
+        if (selectedIndex() >= 0) openBook(selectedIndex())
+        break
+      case 'continueReading': {
+        const book = store.continueReadingBook()
+        if (book?.localPath) props.onOpenBook(book.id)
+        break
+      }
+      case 'addBooks':
+        void window.liseur.app.openEpubDialog()
+        break
+      case 'search':
+        openSearch()
+        break
+      case 'filterNext':
+      case 'filterPrev': {
+        const ids = filters().map((f) => f.id)
+        const next = cycle(ids, store.filter(), command === 'filterNext' ? 1 : -1)
+        if (next) store.setFilter(next)
+        break
+      }
+      case 'sortNext':
+      case 'sortPrev': {
+        const ids = SORTS.map((s) => s.id)
+        const next = cycle(ids, store.sort(), command === 'sortNext' ? 1 : -1)
+        // setSort on the current key would flip the direction instead; the
+        // sorts cycle here, and `r` is the one that reverses.
+        if (next && next !== store.sort()) store.setSort(next)
+        break
+      }
+      case 'sortReverse':
+        store.setSort(store.sort())
+        break
+      case 'stats':
+        setStatsOpen(true)
+        break
+      case 'settings':
+        setSettingsOpen(true)
+        break
+      case 'help':
+        setHelpOpen(true)
+        break
+      case 'closeOverlay':
+        if (sortMenuOpen()) setSortMenuOpen(false)
+        else if (searchOpen()) closeSearch()
+        else setSelectedIndex(-1)
+        break
+    }
   }
 
   const openBook = (index: number) => {
@@ -138,7 +276,10 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   // root div. The library screen unmounts while reading, so this listener
   // never fights the reader's.
   document.addEventListener('keydown', onGlobalKeydown)
-  onCleanup(() => document.removeEventListener('keydown', onGlobalKeydown))
+  onCleanup(() => {
+    document.removeEventListener('keydown', onGlobalKeydown)
+    vim.reset() // drops the sequence timer with the screen
+  })
 
   return (
     <div class="library-screen">
@@ -246,6 +387,11 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       <Show when={statsOpen()}>
         <StatsScreen onClose={() => setStatsOpen(false)} />
       </Show>
+
+      <Show when={helpOpen()}>
+        <VimHelp scope="library" onClose={() => setHelpOpen(false)} />
+      </Show>
+      <VimPending pending={vim.pending} />
 
       <div class="filter-bar">
         <div class="chips" role="tablist" aria-label="Library filters">

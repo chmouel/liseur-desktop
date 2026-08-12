@@ -11,6 +11,7 @@ import {
 import {
   ColumnEngine,
   DEFAULT_READER_PREFERENCES,
+  type ForwardedKeyEvent,
   type PageInfo,
   type ReaderEngine,
   type SelectionAnchor,
@@ -37,6 +38,9 @@ const MARGIN_LABELS: Record<MarginPreset, string> = {
 }
 import { computeRange } from '../library/virtualize'
 import { normalizeText } from './anchoring'
+import { createVimSession, times, vimMode } from '../vim/vim'
+import { READER_BINDINGS, type ReaderCommand } from '../vim/keymap'
+import { VimHelp, VimPending } from '../vim/VimHelp'
 
 /**
  * The M5 reader shell. Chrome auto-hides into "hidden reading mode" after a
@@ -77,6 +81,10 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   } | null>(null)
   const [bookmarksOpen, setBookmarksOpen] = createSignal(false)
   const [searchOpen, setSearchOpen] = createSignal(false)
+  /** Which match `n`/`N` last landed on (-1: the set has not been walked). */
+  const [matchIndex, setMatchIndex] = createSignal(-1)
+  const [helpOpen, setHelpOpen] = createSignal(false)
+  const vim = createVimSession<ReaderCommand>(READER_BINDINGS)
   // Search input is local-first: the field re-renders on the same frame;
   // only the results query is async (debounced, generation-guarded).
   const [searchQuery, setSearchQuery] = createSignal('')
@@ -544,6 +552,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     const query = searchQuery().trim()
     const generation = ++searchGeneration
     setSearchResults([])
+    setMatchIndex(-1) // a new query means a new set for `n`/`N` to walk
     // Every query transition cancels the previous scan — including emptying
     // the field or closing the panel (see cancelActiveSearch callers).
     cancelActiveSearch()
@@ -572,15 +581,42 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     }
   }
 
-  function jumpToResult(result: SearchResult): void {
+  function jumpToResult(result: SearchResult, index: number): void {
     const locator: Locator = {
       href: result.href,
       text: { before: result.before, highlight: result.match, after: result.after },
     }
+    setMatchIndex(index) // `n` carries on from the one that was clicked
     cancelActiveSearch() // jumping closes the panel; the scan stops too
     setSearchOpen(false)
     showChrome()
     void engine?.goToLocator(locator)
+  }
+
+  /**
+   * Vim's `n`/`N` over the matches of the last search. The results outlive
+   * the panel on purpose: closing it with Escape and walking the hits with
+   * `n` is the whole point of having the keys.
+   */
+  function jumpToMatch(delta: number): void {
+    const results = searchResults()
+    if (results.length === 0) return
+    const from = matchIndex()
+    // Nothing walked yet: `n` starts at the first match, `N` at the last.
+    const next =
+      from < 0
+        ? delta > 0
+          ? 0
+          : results.length - 1
+        : (((from + delta) % results.length) + results.length) % results.length
+    setMatchIndex(next)
+    const result = results[next]
+    if (!result) return
+    showChrome()
+    void engine?.goToLocator({
+      href: result.href,
+      text: { before: result.before, highlight: result.match, after: result.after },
+    })
   }
 
   // --- preferences (persisted via settings) --------------------------------
@@ -644,10 +680,28 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
 
   /** Handles keys from the document AND forwarded from inside the book
    *  (iframe key events never cross the boundary). */
-  function onKeydown(e: { key: string; preventDefault(): void; target?: unknown }): void {
+  function onKeydown(e: ForwardedKeyEvent): void {
     // Any key press reveals the chrome (hidden-reading mode is pointer- AND
     // keyboard-dismissable).
     showChrome()
+
+    if (helpOpen()) {
+      // The sheet owns the keyboard while it is up: turning pages behind a
+      // list of keys is not what any of them are for.
+      if (e.key === 'Escape' || e.key === 'q' || e.key === '?') {
+        e.preventDefault()
+        setHelpOpen(false)
+      }
+      return
+    }
+
+    // Escape gets one vim layer before the app's: it drops a half-typed
+    // sequence first, so `2` then Escape does not slam the book shut.
+    if (vimMode() && e.key === 'Escape' && vim.pending()) {
+      e.preventDefault()
+      vim.reset()
+      return
+    }
 
     // Escape is layered and always handled, regardless of focus: panels →
     // fullscreen → back to library. (No "blur the input" layer: Escape is
@@ -658,22 +712,16 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     // out until it had finished laying itself out.
     if (e.key === 'Escape') {
       e.preventDefault()
-      if (
-        tocOpen() ||
-        typographyOpen() ||
-        searchOpen() ||
-        bookmarksOpen() ||
-        selectionAnchor() !== null ||
-        activeAnnotation() !== null
-      ) {
-        closePopovers()
-      } else if (document.fullscreenElement) {
-        void document.exitFullscreen()
-      } else {
-        close()
-      }
+      stepOut()
       return
     }
+
+    // Vim keys are consulted first and claim only what they are bound to.
+    // The plain keys below — arrows, space, PageUp/Down, F11 — are untouched
+    // by vim mode, so nothing anyone already uses stops working. This sits
+    // ahead of the engine check so `q` and `?` answer while a long book is
+    // still laying itself out, exactly as Escape does.
+    if (vim.handle(e, runVimCommand)) return
 
     if (!engine) return
     const target = (e.target ?? {}) as HTMLElement
@@ -688,6 +736,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
         return
       }
     }
+
     switch (e.key) {
       case 'ArrowRight':
       case 'PageDown':
@@ -723,6 +772,147 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     showChrome()
     if (engine?.canGoBack()) void engine.goBack()
     else close()
+  }
+
+  // --- vim mode ------------------------------------------------------------
+
+  /**
+   * The next spine item a reader would actually land on, skipping the
+   * non-linear ones (endnotes, colophons) exactly as page turning does.
+   */
+  function chapterIndex(direction: 1 | -1, from: number): number {
+    const spine = opened()?.spine ?? []
+    for (let i = from + direction; i >= 0 && i < spine.length; i += direction) {
+      if (spine[i]?.linear) return i
+    }
+    return -1
+  }
+
+  function goToChapter(index: number): void {
+    const href = opened()?.spine[index]?.href
+    if (href) void engine?.goToHref(href)
+  }
+
+  function stepChapter(direction: 1 | -1, count: number | null): void {
+    let index = position()?.spineIndex ?? 0
+    for (let i = 0; i < Math.max(1, count ?? 1); i++) {
+      const next = chapterIndex(direction, index)
+      if (next === -1) break
+      index = next
+    }
+    if (index !== position()?.spineIndex) goToChapter(index)
+  }
+
+  /** Start (0) or end (1) of the chapter being read, without leaving it. */
+  function goToChapterEdge(progression: number): void {
+    const locator = engine?.locator()
+    if (!locator) return
+    void engine?.goToLocator({ href: locator.href, locations: { progression } })
+  }
+
+  /**
+   * One step out of wherever the reader currently is: a panel, then
+   * fullscreen, then the book itself. Escape and vim's `q` share it so the
+   * two never disagree about what "back" means.
+   */
+  function stepOut(): void {
+    if (
+      tocOpen() ||
+      typographyOpen() ||
+      searchOpen() ||
+      bookmarksOpen() ||
+      selectionAnchor() !== null ||
+      activeAnnotation() !== null
+    ) {
+      closePopovers()
+    } else if (document.fullscreenElement) {
+      void document.exitFullscreen()
+    } else {
+      close()
+    }
+  }
+
+  function runVimCommand(command: ReaderCommand, count: number | null): void {
+    // These two answer even before the book has finished laying out.
+    if (command === 'help') {
+      setHelpOpen(true)
+      return
+    }
+    if (command === 'quit') {
+      stepOut()
+      return
+    }
+    const active = engine
+    if (!active) return
+    switch (command) {
+      case 'nextPage':
+        times(count, () => void active.nextPage())
+        break
+      case 'prevPage':
+        times(count, () => void active.prevPage())
+        break
+      case 'nextChapter':
+        stepChapter(1, count)
+        break
+      case 'prevChapter':
+        stepChapter(-1, count)
+        break
+      case 'chapterStart':
+        goToChapterEdge(0)
+        break
+      case 'chapterEnd':
+        // Just short of 1: a progression of exactly 1 is the next chapter.
+        goToChapterEdge(0.999)
+        break
+      case 'bookStart':
+        void active.goToProgression(0)
+        break
+      case 'bookEnd':
+        // `12G` is the twelfth chapter, the way `12G` is the twelfth line.
+        if (count === null) void active.goToProgression(1)
+        else goToChapter(Math.min(count, opened()?.spine.length ?? 1) - 1)
+        break
+      case 'percent':
+        // `50%` is halfway through the book; a bare `%` means nothing here.
+        if (count !== null) void active.goToProgression(Math.min(100, count) / 100)
+        break
+      case 'search':
+        togglePopover('search')
+        break
+      case 'nextMatch':
+        times(count, () => jumpToMatch(1))
+        break
+      case 'prevMatch':
+        times(count, () => jumpToMatch(-1))
+        break
+      case 'toc':
+        togglePopover('toc')
+        break
+      case 'toggleBookmark':
+        void toggleBookmark()
+        break
+      case 'bookmarks':
+        togglePopover('bookmarks')
+        break
+      case 'typography':
+        togglePopover('typography')
+        break
+      case 'fontBigger':
+        applyPrefs({ fontSize: clampFontSize(prefs().fontSize + 1) })
+        break
+      case 'fontSmaller':
+        applyPrefs({ fontSize: clampFontSize(prefs().fontSize - 1) })
+        break
+      case 'toggleColumns':
+        applyPrefs({ columns: prefs().columns === 1 ? 2 : 1 })
+        break
+      case 'fullscreen':
+        toggleFullscreen()
+        break
+      case 'jumpBack':
+        if (active.canGoBack()) void active.goBack()
+        break
+    }
   }
 
   function close(): void {
@@ -853,6 +1043,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     clearTimeout(hideTimer)
     clearTimeout(searchDebounce)
     cancelActiveSearch()
+    vim.reset() // drops the pending-sequence timer with the screen
     void flushNote()
     document.removeEventListener('keydown', onKeydown)
     document.removeEventListener('mouseup', onMouseUp)
@@ -1124,12 +1315,12 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
             </Show>
           </div>
           <ul class="book-search-results">
-            {searchResults().map((result) => (
+            {searchResults().map((result, index) => (
               <li>
                 <button
                   type="button"
                   class="book-search-result"
-                  onClick={() => jumpToResult(result)}
+                  onClick={() => jumpToResult(result, index)}
                 >
                   <span class="result-context">{normalizeText(result.before)}</span>
                   <mark>{result.match}</mark>
@@ -1249,6 +1440,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
           </p>
         )}
       </Show>
+
+      <Show when={helpOpen()}>
+        <VimHelp scope="reader" onClose={() => setHelpOpen(false)} />
+      </Show>
+      <VimPending pending={vim.pending} />
 
       {/* No overlay buttons: they would block text selection (M6). Taps are
           handled inside the book — left/right third turns, center toggles

@@ -19,8 +19,9 @@ retired milestone roadmap against what actually exists in `src/`.
 - **Markdown export of annotations.** No export code exists anywhere in
   `src/`.
 - **Configurable shortcuts.** Reader keys (arrows/space/PgUp/PgDn/+/-/c/f/
-  F11/Esc) are hardcoded in `ReaderScreen.tsx`; there is no remapping UI or
-  settings entry.
+  F11/Esc) are hardcoded in `ReaderScreen.tsx`, and the vim bindings in
+  `src/renderer/vim/keymap.ts` are fixed tables; there is no remapping UI
+  or settings entry beyond the on/off switch for vim mode.
 
 ## Packaging
 

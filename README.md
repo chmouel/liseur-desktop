@@ -49,6 +49,19 @@ middle:
 gh attestation verify <file> --repo chmouel/liseur-desktop
 ```
 
+## Vim mode
+
+If you already navigate everything else with `hjkl`, turn on "Vim keys" in
+Settings and the shelf and the book answer to them: `j`/`k` to move,
+`gg` and `G` for the ends, counts like `5j` or `12G`, `]]` and `[[` for
+chapters, `50%` to jump halfway, `/` to search, `n` and `N` between
+matches, `m` to bookmark, `q` or Escape to come back. Press `?` for the
+whole list, wherever you are.
+
+It is off by default and changes nothing when it is off. Even with it on,
+the arrows, space, page keys and menu shortcuts keep working exactly as
+they did.
+
 ## DEVELOPMENT
 
 [docs/DESIGN.md](docs/DESIGN.md) covers what it is and where it came from.

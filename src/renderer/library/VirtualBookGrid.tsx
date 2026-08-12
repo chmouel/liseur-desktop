@@ -1,7 +1,14 @@
 import { createSignal, createEffect, onCleanup, onMount, For, type JSX } from 'solid-js'
 import type { Book } from '@shared/domain/types'
 import { coverFor, requestRemoteCover } from './covers'
-import { computeColumns, computeRange } from './virtualize'
+import {
+  computeColumns,
+  computeRange,
+  GRID_CARD_WIDTH,
+  GRID_COVER_HEIGHT,
+  GRID_GAP,
+  GRID_ROW_HEIGHT,
+} from './virtualize'
 
 /**
  * Virtualized adaptive cover grid.
@@ -11,10 +18,9 @@ import { computeColumns, computeRange } from './virtualize'
  * ResizeObserver. Scrolling only updates offsets; no layout thrash.
  */
 
-const CARD_WIDTH = 128
-const CARD_HEIGHT = 236 // cover 192 + text
-const GAP = 20
-const ROW_HEIGHT = CARD_HEIGHT + GAP
+const CARD_WIDTH = GRID_CARD_WIDTH
+const GAP = GRID_GAP
+const ROW_HEIGHT = GRID_ROW_HEIGHT
 
 interface Props {
   books: () => Book[]
@@ -120,7 +126,7 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                       decoding="async"
                       draggable={false}
                       width={CARD_WIDTH}
-                      height={192}
+                      height={GRID_COVER_HEIGHT}
                     />
                     {book.finished && <span class="badge badge-finished">Finished</span>}
                     {book.downloaded && (

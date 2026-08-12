@@ -1,6 +1,7 @@
 @import './tokens.css';
 @import './library.css';
 @import './reader.css';
+@import './vim.css';
 
 * {
   box-sizing: border-box;

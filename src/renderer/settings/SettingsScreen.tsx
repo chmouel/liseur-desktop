@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount, Show, For, type JSX } from 'solid-js'
 import type { ServerInfo, ServerType, SyncState } from '@shared/ipc/protocol'
+import { setVimMode, vimMode } from '../vim/vim'
 
 /**
  * Settings overlay (M7): remote servers, sync state, conflict resolution.
@@ -153,7 +154,18 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
   }
 
   return (
-    <div class="settings-overlay" role="dialog" aria-label="Settings">
+    <div
+      class="settings-overlay"
+      role="dialog"
+      aria-label="Settings"
+      // Escape closes the panel from inside it too. The library's key
+      // handler deliberately keeps its hands off anything focused in a
+      // field, which used to leave a ticked checkbox holding the keyboard
+      // with no way out but the mouse.
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') props.onClose()
+      }}
+    >
       <div class="settings-panel">
         <header class="settings-header">
           <h1>Settings</h1>
@@ -177,6 +189,23 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
             />
             Resume last opened book on launch
           </label>
+          <label class="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={vimMode()}
+              onChange={(e) => setVimMode(e.currentTarget.checked)}
+            />
+            Vim keys in the library and the reader
+          </label>
+          <p class="settings-hint">
+            <Show
+              when={vimMode()}
+              fallback="hjkl to move, / to search, gg and G for the ends, counts like 5j. Arrows, space and the menu shortcuts keep working either way."
+            >
+              Press <kbd>?</kbd> on the shelf or in a book for the full list. Arrows, space and the
+              menu shortcuts keep working alongside them.
+            </Show>
+          </p>
         </section>
 
         <section class="settings-section">

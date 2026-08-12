@@ -3,6 +3,17 @@
  * testable without a DOM.
  */
 
+/**
+ * Book grid metrics. They live here rather than in the component because the
+ * keyboard needs them too: moving a row or a screenful is the same arithmetic
+ * the grid lays itself out with, and two copies of it would drift.
+ */
+export const GRID_CARD_WIDTH = 128
+export const GRID_COVER_HEIGHT = 192
+export const GRID_CARD_HEIGHT = GRID_COVER_HEIGHT + 44 // cover + title + author
+export const GRID_GAP = 20
+export const GRID_ROW_HEIGHT = GRID_CARD_HEIGHT + GRID_GAP
+
 export interface VirtualRange {
   /** First visible item index (inclusive). */
   start: number

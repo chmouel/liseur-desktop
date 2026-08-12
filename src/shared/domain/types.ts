@@ -99,6 +99,11 @@ export interface Settings {
   theme: AppTheme
   /** Skip the library and jump straight into the last opened book on launch. */
   resumeLastBook?: boolean
+  /**
+   * Vim keys in the library and the reader. Off by default: `j` must not do
+   * anything surprising to someone who never asked for it.
+   */
+  vimMode?: boolean
   /** Reader preferences persist across sessions and books (M5). */
   reader?: ReaderPreferences | undefined
 }

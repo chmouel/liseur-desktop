@@ -3,6 +3,7 @@ import { initTheme } from './theme'
 import { initLibrary, useLibraryStore } from '../library/store'
 import { LibraryScreen } from '../library/LibraryScreen'
 import { ReaderScreen } from '../reader/ReaderScreen'
+import { initVimMode } from '../vim/vim'
 import { observeLongTasks, perf } from '../perf/perf'
 
 /**
@@ -51,6 +52,7 @@ export function App(): JSX.Element {
   onMount(() => {
     initTheme()
     initLibrary()
+    initVimMode()
     observeLongTasks()
     watchForNewServerBooks()
     void maybeResumeLastBook(setOpenBookId)

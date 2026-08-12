@@ -42,6 +42,21 @@ export interface PageInfo {
   endOfBook: boolean
 }
 
+/**
+ * A key press forwarded out of the book iframe. Modifiers travel with it:
+ * the shell reads chords (vim mode's `<C-o>`), and a listener that only
+ * looked at `key` would fire on the control chord as if it were the letter.
+ */
+export interface ForwardedKeyEvent {
+  key: string
+  ctrlKey?: boolean | undefined
+  altKey?: boolean | undefined
+  metaKey?: boolean | undefined
+  shiftKey?: boolean | undefined
+  target?: unknown
+  preventDefault(): void
+}
+
 /** Where a selection anchor was captured (viewport coordinates). */
 export interface SelectionAnchor {
   locator: Locator
@@ -115,7 +130,7 @@ export interface ReaderEngine {
    */
   onActivity(listener: () => void): void
   /** Key presses inside the book, forwarded for shell shortcuts. */
-  onKeyEvent(listener: (event: { key: string; preventDefault(): void }) => void): void
+  onKeyEvent(listener: (event: ForwardedKeyEvent) => void): void
   /** Tap on the middle third of the page (no text selection, no link). */
   onCenterTap(listener: () => void): void
   /** The mouse's side "back" button, pressed anywhere over the book. */
@@ -155,9 +170,7 @@ export class ColumnEngine implements ReaderEngine {
   private readonly selectionListeners = new Set<() => void>()
   private readonly annotationClickListeners = new Set<(id: string, x: number, y: number) => void>()
   private readonly activityListeners = new Set<() => void>()
-  private readonly keyListeners = new Set<
-    (event: { key: string; preventDefault(): void }) => void
-  >()
+  private readonly keyListeners = new Set<(event: ForwardedKeyEvent) => void>()
   private readonly centerTapListeners = new Set<() => void>()
   private readonly backButtonListeners = new Set<() => void>()
   private lastActivityAt = 0
@@ -394,7 +407,7 @@ export class ColumnEngine implements ReaderEngine {
     this.activityListeners.add(listener)
   }
 
-  onKeyEvent(listener: (event: { key: string; preventDefault(): void }) => void): void {
+  onKeyEvent(listener: (event: ForwardedKeyEvent) => void): void {
     this.keyListeners.add(listener)
   }
 

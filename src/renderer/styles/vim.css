@@ -1,0 +1,107 @@
+/* Vim mode: the `?` sheet and the half-typed sequence hint.
+   Colors come from tokens.css — the reader redefines them to paper white,
+   so the same rules read correctly on both screens. */
+
+.vim-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(0 0 0 / 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6vh;
+}
+
+.vim-help-panel {
+  width: 760px;
+  max-width: 92vw;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px var(--shadow);
+  padding: 20px 24px;
+}
+
+.vim-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vim-help-header h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.vim-help-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 4px 28px;
+}
+
+.vim-help-group h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 18px 0 6px;
+}
+
+.vim-help-group dl {
+  margin: 0;
+}
+
+.vim-help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.vim-help-row dt {
+  flex: 0 0 88px;
+  text-align: right;
+}
+
+.vim-help-row dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.vim-help-panel kbd {
+  font-family: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+  font-size: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.vim-help-footer {
+  margin: 22px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The pending sequence, where vim puts it: out of the way, bottom right. */
+.vim-pending {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 55;
+  font-family: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  pointer-events: none;
+}

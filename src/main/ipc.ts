@@ -61,6 +61,7 @@ export function setupIpc(): void {
     const settings: Settings = {
       theme: persisted.settings?.theme ?? 'system',
       resumeLastBook: persisted.settings?.resumeLastBook ?? false,
+      vimMode: persisted.settings?.vimMode ?? false,
     }
     if (persisted.settings?.reader) settings.reader = persisted.settings.reader
     return settings
@@ -72,6 +73,7 @@ export function setupIpc(): void {
     const settings: Settings = {
       theme: patch.theme ?? current.settings?.theme ?? 'system',
       resumeLastBook: patch.resumeLastBook ?? current.settings?.resumeLastBook ?? false,
+      vimMode: patch.vimMode ?? current.settings?.vimMode ?? false,
       ...((patch.reader ?? current.settings?.reader)
         ? { reader: patch.reader ?? current.settings?.reader }
         : {}),
