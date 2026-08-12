@@ -25,6 +25,18 @@ export default tseslint.config(
     },
   },
   {
+    // A plain Node script, deliberately free of dependencies — which includes
+    // not pulling in `globals` just to name three of them.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        fetch: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
+  {
     // Main, preload and worker are Node-side and may import electron/node.
     files: [
       'src/main/**',
