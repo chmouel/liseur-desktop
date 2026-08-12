@@ -169,7 +169,7 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   expect(thumbnailRequests).toBeGreaterThan(0)
 
   // --- open downloads it on demand ---------------------------------------------
-  await card.dblclick()
+  await card.click()
   await page.waitForSelector('.reader-screen')
   const iframe = page.frameLocator('.reader-iframe')
   await expect(iframe.locator('h1')).toHaveText('Chapter 1', { timeout: 15_000 })

@@ -101,8 +101,12 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                   type="button"
                   class="book-card"
                   classList={{ selected: props.selectedIndex() === index() }}
-                  onClick={() => props.onSelect(index())}
-                  onDblClick={() => props.onOpen(index())}
+                  // One click opens. Selection still moves so the arrow keys
+                  // carry on from wherever the last click landed.
+                  onClick={() => {
+                    props.onSelect(index())
+                    props.onOpen(index())
+                  }}
                   role="gridcell"
                   aria-selected={props.selectedIndex() === index()}
                   aria-label={`${book.title} by ${book.authors.join(', ')}`}

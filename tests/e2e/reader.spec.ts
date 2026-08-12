@@ -37,7 +37,7 @@ async function openBook(page: Page): Promise<void> {
   await page.locator('.search-input').fill('Reader Fixture')
   const card = page.getByRole('gridcell', { name: /Reader Fixture/ })
   await expect(card).toBeVisible({ timeout: 10_000 })
-  await card.dblclick()
+  await card.click()
   await page.waitForSelector('.reader-screen')
 }
 

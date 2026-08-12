@@ -57,7 +57,7 @@ export async function openBookByTitle(page: Page, title: string): Promise<void> 
   await page.locator('.search-input').fill(title)
   const card = page.getByRole('gridcell', { name: new RegExp(title) })
   await card.waitFor({ timeout: 10_000 })
-  await card.dblclick()
+  await card.click()
   await page.waitForSelector('.reader-screen')
 }
 
