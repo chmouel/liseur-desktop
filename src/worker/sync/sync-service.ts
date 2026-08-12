@@ -13,6 +13,7 @@ import { CalibreCatalog, provisionKoboToken } from './calibre'
 import {
   LiseurSyncCatalog,
   liseurSyncLogin,
+  liseurSyncMintInsightsToken,
   type InsightsSummary,
   type WorkInsights,
 } from './liseur-sync'
@@ -395,6 +396,42 @@ export class SyncService {
    */
   trackSessions(sessions: ReadingSessionRepository): void {
     this.sessions = sessions
+  }
+
+  /**
+   * Grants an already-configured server the statistics permission.
+   *
+   * Servers added before statistics existed, or by a reader who declined
+   * them, hold only a sync token, and those routes refuse it. Removing the
+   * server to sign in again would unlink every book from it, so this asks
+   * for the password once and mints the second credential in place.
+   */
+  async enableStats(
+    serverId: string,
+    password: string,
+  ): Promise<{ ok: boolean; detail?: string }> {
+    const server = this.repository.getServer(serverId)
+    if (!server || server.type !== 'liseur-sync') return { ok: false, detail: 'no such server' }
+    const credentials = this.credentials.get(serverId)
+    if (!credentials) return { ok: false, detail: 'this server has no credentials yet' }
+
+    const minted = await liseurSyncMintInsightsToken(
+      server.url,
+      server.username ?? '',
+      password,
+      this.deps.fetchImpl,
+    )
+    if (!minted.ok) return { ok: false, detail: minted.detail }
+
+    const extra = { ...credentials.extra, insightsToken: minted.token }
+    try {
+      await this.deps.storeSecret(serverId, credentials.headers, extra)
+    } catch (err) {
+      return { ok: false, detail: `credential storage failed: ${(err as Error).message}` }
+    }
+    this.setCredentials(serverId, { headers: credentials.headers, extra })
+    this.emitState()
+    return { ok: true }
   }
 
   /**

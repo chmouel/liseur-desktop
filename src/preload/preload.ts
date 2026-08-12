@@ -259,6 +259,13 @@ const api = {
           m.kind === 'sync.setupServer.result',
       ).then((r) => ({ server: r.server, test: r.test }))
     },
+    enableStats(serverId: string, password: string): Promise<{ ok: boolean; detail?: string }> {
+      return request(
+        (id) => ({ kind: 'sync.enableStats', id, serverId, password }),
+        (m): m is Extract<WorkerMessage, { kind: 'sync.enableStats.result' }> =>
+          m.kind === 'sync.enableStats.result',
+      ).then((r) => ({ ok: r.ok, ...(r.detail ? { detail: r.detail } : {}) }))
+    },
     removeServer(serverId: string): Promise<void> {
       return request(
         (id) => ({ kind: 'sync.removeServer', id, serverId }),

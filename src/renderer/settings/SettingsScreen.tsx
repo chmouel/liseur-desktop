@@ -23,6 +23,9 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
   const [addOpen, setAddOpen] = createSignal(false)
   const [busy, setBusy] = createSignal<string | null>(null)
   const [testResults, setTestResults] = createSignal<Record<string, string>>({})
+  const [statsFor, setStatsFor] = createSignal<string | null>(null)
+  const [statsPassword, setStatsPassword] = createSignal('')
+  const [statsError, setStatsError] = createSignal<string | null>(null)
 
   // form fields
   const [formType, setFormType] = createSignal<ServerType>('komga')
@@ -45,6 +48,26 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
     const off = window.liseur.sync.onStateChanged((s) => setState(s))
     onCleanup(off)
   })
+
+  async function shareStats(e: Event, serverId: string): Promise<void> {
+    e.preventDefault()
+    setStatsError(null)
+    setBusy(serverId)
+    try {
+      const result = await window.liseur.sync.enableStats(serverId, statsPassword())
+      if (!result.ok) {
+        setStatsError(result.detail ?? 'the server would not grant it')
+        return
+      }
+      setStatsFor(null)
+      setStatsPassword('')
+      await refresh()
+    } catch (err) {
+      setStatsError((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   function serverTypeMeta(type: ServerType) {
     return SERVER_TYPES.find((t) => t.id === type) ?? SERVER_TYPES[0]!
@@ -164,8 +187,43 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
                   </span>
                   <Show when={server.type === 'liseur-sync' && !server.sharesStats}>
                     <span class="server-detail">
-                      Statistics are not shared with this server; totals stay on this computer.
-                      Remove and add it again to share them.
+                      Statistics are not shared with this server, so reading totals only count
+                      this computer.{' '}
+                      <Show
+                        when={statsFor() === server.id}
+                        fallback={
+                          <button
+                            type="button"
+                            class="link-button"
+                            onClick={() => {
+                              setStatsError(null)
+                              setStatsPassword('')
+                              setStatsFor(server.id)
+                            }}
+                          >
+                            Share them
+                          </button>
+                        }
+                      >
+                        <form class="share-stats" onSubmit={(e) => void shareStats(e, server.id)}>
+                          <input
+                            type="password"
+                            placeholder="Password"
+                            autocomplete="current-password"
+                            value={statsPassword()}
+                            onInput={(e) => setStatsPassword(e.currentTarget.value)}
+                          />
+                          <button type="submit" disabled={busy() === server.id}>
+                            {busy() === server.id ? 'Asking…' : 'Share'}
+                          </button>
+                          <button type="button" onClick={() => setStatsFor(null)}>
+                            Cancel
+                          </button>
+                        </form>
+                        <Show when={statsError()}>
+                          <span class="settings-error">{statsError()}</span>
+                        </Show>
+                      </Show>
                     </span>
                   </Show>
                   <Show when={testResults()[server.id]}>

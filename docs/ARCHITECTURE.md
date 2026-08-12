@@ -225,7 +225,10 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
 - Those routes require the server's separate `read-insights` scope, which a
   `sync` token is refused. Setup mints both tokens and stores the second as
   `extra.insightsToken`; a server that will not grant it still syncs
-  positions, and the settings row says the totals stay local.
+  positions. A server configured before statistics existed can be granted
+  the permission from the settings row (`sync.enableStats`), which asks for
+  the password and mints only that credential: removing and re-adding the
+  server would unlink every book from it.
 - UI: `renderer/stats/StatsScreen.tsx`, opened from the library header.
 
 > Note: Electron 43 utilityProcess children expose `process.parentPort`

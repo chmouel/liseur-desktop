@@ -378,6 +378,41 @@ export async function liseurSyncLogin(
   return { ok: true, token, ...(insightsToken ? { insightsToken } : {}) }
 }
 
+/**
+ * Asks an existing server for the statistics permission on its own.
+ *
+ * Signing in again would mean removing the server and adding it back, which
+ * unlinks every book from it; this only mints the second credential, leaving
+ * the sync token and every link alone.
+ */
+export async function liseurSyncMintInsightsToken(
+  serverUrl: string,
+  username: string,
+  password: string,
+  fetchImpl?: ConstructorParameters<typeof Http>[2],
+): Promise<{ ok: true; token: string } | { ok: false; detail: string }> {
+  const login = await new Http(serverUrl, {}, fetchImpl).request('POST', '/v1/login', {
+    body: JSON.stringify({ username, password }),
+    headers: { 'content-type': 'application/json' },
+  })
+  if (!login.ok || !login.value) return { ok: false, detail: await describe('sign-in', login) }
+  const session = await login.value.json<{ auth_token?: string }>()
+  if (!session.auth_token) return { ok: false, detail: 'sign-in answered without a credential' }
+
+  const mint = await new Http(
+    serverUrl,
+    { authorization: `Bearer ${session.auth_token}` },
+    fetchImpl,
+  ).request('POST', '/v1/tokens', {
+    body: JSON.stringify({ name: 'liseur-desktop (statistics)', scope: 'read-insights' }),
+    headers: { 'content-type': 'application/json' },
+  })
+  if (!mint.ok || !mint.value) return { ok: false, detail: await describe('statistics token', mint) }
+  const data = await mint.value.json<{ secret?: string; token?: string }>()
+  const token = data.secret ?? data.token
+  return token ? { ok: true, token } : { ok: false, detail: 'statistics token came back empty' }
+}
+
 /** Turns a refused request into something worth showing a person. */
 async function describe(what: string, result: HttpResult<HttpResponse>): Promise<string> {
   if (!result.value) return `${what} failed: ${result.error ?? `HTTP ${result.status}`}`

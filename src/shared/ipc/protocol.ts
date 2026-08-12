@@ -162,6 +162,7 @@ export type WorkerRequest =
   | { kind: 'sync.ensureCover'; id: number; bookId: string }
   | { kind: 'sync.getState'; id: number }
   | { kind: 'stats.get'; id: number }
+  | { kind: 'sync.enableStats'; id: number; serverId: string; password: string }
   | {
       kind: 'sync.resolveConflict'
       id: number
@@ -194,6 +195,7 @@ export type WorkerResponse =
   | { kind: 'sync.download.result'; id: number; book: Book | null }
   | { kind: 'sync.getState.result'; id: number; state: SyncState }
   | { kind: 'stats.get.result'; id: number; stats: ReadingStats }
+  | { kind: 'sync.enableStats.result'; id: number; ok: boolean; detail?: string }
   | { kind: 'sync.resolveConflict.result'; id: number }
   | { kind: 'pong'; id: number }
   | { kind: 'error'; id: number; message: string }

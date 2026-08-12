@@ -309,6 +309,14 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
         )
         .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
+    case 'sync.enableStats':
+      void sync
+        .enableStats(request.serverId, request.password)
+        .then((result) =>
+          send(port, { kind: 'sync.enableStats.result', id: request.id, ...result }),
+        )
+        .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
+      break
     case 'sync.resolveConflict':
       void sync
         .resolveConflict(request.bookId, request.serverId, request.choice)

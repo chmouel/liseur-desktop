@@ -1122,6 +1122,83 @@ describe('SyncService against mock Komga', () => {
     ])
   })
 
+  it('can be granted the statistics permission without losing its books', async () => {
+    // A server added before statistics existed holds only a sync token, and
+    // the insights routes refuse it. Removing the server to sign in again
+    // would unlink every book from it, so the permission is asked for on its
+    // own instead.
+    let grantInsights = false
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      if (path === '/v1/login') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { password?: string }
+        if (body.password !== 'password') return jsonResponse({ error: 'no' }, 401)
+        return jsonResponse({ auth_token: 'x', expires_in: 3600 })
+      }
+      if (path === '/v1/tokens') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { scope?: string }
+        if (body.scope === 'read-insights' && !grantInsights) {
+          return jsonResponse({ error: 'statistics are off' }, 403)
+        }
+        return jsonResponse(
+          { token_id: 't', device_id: 'd', secret: `secret-for-${body.scope ?? ''}` },
+          201,
+        )
+      }
+      if (path === '/v1/changes') return jsonResponse({ ops: [], high_water: '0' })
+      if (path === '/v1/insights/summary') {
+        if (headers['authorization'] !== 'Bearer secret-for-read-insights') {
+          return jsonResponse({ error: 'insufficient scope' }, 403)
+        }
+        return jsonResponse({ range_days: 30, total_active_minutes: 60, sessions: 3, streak_days: 1 })
+      }
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Sync',
+      url: 'http://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+
+    const books = new BookRepository(db)
+    books.insertBooks([
+      {
+        id: 'local-1',
+        title: 'Guidebook',
+        authors: [],
+        finished: false,
+        archived: false,
+        downloaded: true,
+        addedAt: Date.now(),
+      },
+    ])
+    new SyncRepository(db).link(server.id, 'local-1', 'work-1')
+
+    // The server refused the permission at setup, so there is nothing to add.
+    expect(service.state().servers[0]?.sharesStats).toBe(false)
+    expect(await service.serverInsights('2024-03-01', '2024-03-07')).toBeNull()
+
+    // A wrong password changes nothing.
+    expect(await service.enableStats(server.id, 'wrong')).toMatchObject({ ok: false })
+    expect(service.state().servers[0]?.sharesStats).toBe(false)
+
+    grantInsights = true
+    expect(await service.enableStats(server.id, 'password')).toEqual({ ok: true })
+    expect(service.state().servers[0]?.sharesStats).toBe(true)
+
+    // The book kept its link, and the server now answers.
+    expect(new SyncRepository(db).linkedBookIds(server.id).map((l) => l.bookId)).toEqual([
+      'local-1',
+    ])
+    const insights = await service.serverInsights('2024-03-01', '2024-03-07')
+    expect(insights?.summary?.totalMs).toBe(60 * 60_000)
+  })
+
   it('says why a liseur-sync sign-in failed instead of just "login failed"', async () => {
     const fetchImpl: FetchLike = async (url) =>
       new URL(url).pathname.endsWith('/v1/login')
