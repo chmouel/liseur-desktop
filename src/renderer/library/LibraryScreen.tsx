@@ -141,24 +141,31 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   return (
     <div class="library-screen">
       <header class="topbar">
-        <div class="brand">
+        <button
+          type="button"
+          class="brand"
+          // The shelf can be thousands of rows long; the mark is the way
+          // back to the top, as it is on the phone.
+          onClick={() => gridEl?.scrollTo({ top: 0 })}
+          title="Back to the top"
+        >
           <img
             class="brand-tile"
             src={dark() ? brandTileDark : brandTile}
             alt=""
-            width={96}
-            height={44}
+            width={200}
+            height={150}
             draggable={false}
           />
-          <div class="brand-text">
+          <span class="brand-text">
             <span class="brand-name">Liseur</span>
             <Show when={!store.loading() && store.totalCount() > 0}>
               <span class="brand-count">
                 {store.totalCount().toLocaleString()} {store.totalCount() === 1 ? 'book' : 'books'}
               </span>
             </Show>
-          </div>
-        </div>
+          </span>
+        </button>
 
         <Show when={searchOpen()}>
           <input
@@ -196,7 +203,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button primary"
             onClick={() => void window.liseur.app.openEpubDialog()}
             aria-label="Add books"
             title="Open EPUB… (Ctrl/Cmd+O)"

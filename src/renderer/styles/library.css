@@ -11,8 +11,8 @@
 .topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 20px;
+  gap: 20px;
+  padding: 16px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   -webkit-app-region: drag; /* native-feeling window dragging */
@@ -26,49 +26,78 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
   flex-shrink: 0;
+  padding: 4px;
+  margin: -4px;
+  border: none;
+  border-radius: 16px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brand:hover .brand-tile {
+  box-shadow: 0 4px 14px var(--shadow);
 }
 
 /* The reading-scene tile from the Android app, framed as a small picture
    rather than knocked out to a monogram. Fixed aspect so the frame can
-   never come out wider than the art and slice her head off. */
+   never come out wider than the art and slice her head off. The phone
+   grows this on a wide screen; a desktop window is always wide. */
 .brand-tile {
   display: block;
-  height: 44px;
+  height: 72px;
   width: auto;
   aspect-ratio: 838 / 383;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px var(--shadow);
+  transition: box-shadow 120ms ease;
   user-select: none;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.15;
+  gap: 4px;
+  line-height: 1.1;
 }
 
 .brand-name {
   font-family: Georgia, serif;
-  font-size: 20px;
-  letter-spacing: 0.02em;
+  font-size: 34px;
+  letter-spacing: 0.01em;
 }
 
 .brand-count {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
 }
 
 .search-input {
   flex: 1;
-  min-width: 120px;
-  padding: 6px 12px;
+  min-width: 160px;
+  max-width: 520px;
+  padding: 11px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--bg-elevated);
+  font-size: 15px;
+}
+
+.search-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: transparent;
 }
 
 .search-input::placeholder {
@@ -78,25 +107,42 @@
 .topbar-actions {
   margin-left: auto;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
 }
 
 .icon-button {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
-  font-size: 16px;
+  font-size: 22px;
   cursor: pointer;
   color: var(--text-secondary);
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .icon-button:hover {
   background: var(--bg-sunken);
   color: var(--text);
+}
+
+/* Adding books is the one thing on this bar worth pointing at. */
+.icon-button.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 24px;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.icon-button.primary:hover {
+  background: var(--accent-strong);
+  color: var(--on-accent);
 }
 
 .icon-button:disabled {
@@ -107,6 +153,22 @@
 .icon-button:disabled:hover {
   background: transparent;
   color: var(--text-secondary);
+}
+
+/* A short window has no room for a banner: the mark shrinks before the
+   shelf does. */
+@media (max-height: 700px) {
+  .topbar {
+    padding: 10px 20px;
+  }
+
+  .brand-tile {
+    height: 48px;
+  }
+
+  .brand-name {
+    font-size: 24px;
+  }
 }
 
 /* --- Filter / sort bar --- */

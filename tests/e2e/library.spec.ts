@@ -65,6 +65,23 @@ test('the top bar carries the brand tile and the size of the shelf', async () =>
   await expect.poll(() => page.locator('.brand-count').textContent()).not.toBe(all)
   await page.getByRole('tab', { name: 'All' }).click()
   await expect(page.locator('.brand-count')).toHaveText(all!)
+
+  // The bar is a banner, not a strip: the art is big enough to read as a
+  // picture and the wordmark big enough to read across a desk.
+  const tile = await page.locator('.brand-tile').evaluate((el) => el.getBoundingClientRect().height)
+  expect(tile).toBeGreaterThanOrEqual(64)
+  const name = await page
+    .locator('.brand-name')
+    .evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+  expect(name).toBeGreaterThanOrEqual(30)
+})
+
+test('the brand mark takes you back to the top of the shelf', async () => {
+  const scroll = page.locator('.book-grid-scroll')
+  await scroll.evaluate((el) => el.scrollTo({ top: 4000 }))
+  await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  await page.locator('.brand').click()
+  await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0)
 })
 
 test('renderer has no Node access', async () => {
