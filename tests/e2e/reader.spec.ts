@@ -102,8 +102,17 @@ test('opens, paginates, persists and restores progress', async () => {
     await expect(card.locator('.continue-title')).toHaveText('Reader Fixture')
     await expect(card.locator('.continue-percent')).not.toHaveText('0%')
 
-    // Reopen: restores the exact position persisted before closing.
-    await openBook(page)
+    // It is the banner of the shelf, not a strip: a full-size cover and a
+    // visible way back into the book.
+    expect(
+      await card.locator('.continue-cover').evaluate((el) => el.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(180)
+    await expect(card.locator('.continue-resume')).toBeVisible()
+
+    // Reopen from the banner: restores the exact position persisted before
+    // closing. Clicking the resume pill must reach the card underneath it.
+    await card.locator('.continue-resume').click()
+    await page.waitForSelector('.reader-screen')
     await expect(iframe.locator('h1')).toHaveText('Chapter 3', { timeout: 10_000 })
     await expect
       .poll(() => page.locator('.reader-footer').textContent(), { timeout: 10_000 })

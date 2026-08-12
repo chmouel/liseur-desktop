@@ -38,6 +38,7 @@
   --on-accent: #fffaf4;
   --border: #e4ddd1;
   --focus: var(--teal);
+  --progress: var(--teal);
   --danger: #a33b2e;
   --shadow: rgb(21 17 12 / 0.08);
 }
@@ -56,6 +57,9 @@
   --on-accent: #1c130b;
   --border: #352b1f;
   --focus: #7fc4bb;
+  /* Dark ink needs a lighter bar: the light theme's teal disappears
+     into the page. */
+  --progress: var(--teal-light);
   --danger: #e07a6a;
   --shadow: rgb(0 0 0 / 0.4);
 }

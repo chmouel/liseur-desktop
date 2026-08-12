@@ -3,8 +3,10 @@ import type { Book } from '@shared/domain/types'
 import { coverFor } from './covers'
 
 /**
- * "Continue reading" card: the shelf with whatever you were last reading on
- * top — cover, label, title, author, progress bar and percent.
+ * "Continue reading" banner: the shelf with whatever you were last reading
+ * on top. It is the thing on the library screen you are most likely to
+ * click, so it gets a full-size cover and the width of the window rather
+ * than a thin strip above the grid.
  */
 
 export function ContinueReading(props: { book: Book | null; onOpen: () => void }): JSX.Element {
@@ -19,16 +21,17 @@ export function ContinueReading(props: { book: Book | null; onOpen: () => void }
             class="continue-cover"
             src={coverFor(book())}
             alt=""
-            width={72}
-            height={108}
-            loading="lazy"
+            width={132}
+            height={198}
             decoding="async"
             draggable={false}
           />
           <div class="continue-body">
             <span class="continue-label">Continue reading</span>
             <span class="continue-title">{book().title}</span>
-            <span class="continue-author">{book().authors.join(', ')}</span>
+            <Show when={book().authors.length > 0}>
+              <span class="continue-author">{book().authors.join(', ')}</span>
+            </Show>
             <div class="continue-progress-row">
               <div
                 class="continue-progress"
@@ -43,6 +46,9 @@ export function ContinueReading(props: { book: Book | null; onOpen: () => void }
               <span class="continue-percent">{percent()}%</span>
             </div>
           </div>
+          {/* A span, not a button: the whole card is already the button and
+              nesting one inside another is invalid. */}
+          <span class="continue-resume">Resume</span>
         </button>
       )}
     </Show>

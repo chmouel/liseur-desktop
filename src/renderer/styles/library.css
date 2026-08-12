@@ -432,80 +432,139 @@
 /* --- Continue reading --- */
 
 .continue-reading {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
+  gap: 24px;
+  padding: 22px 26px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-elevated);
+  border-radius: 18px;
+  /* A warm sweep from the palette rather than from the book: a blurred
+     cover tints the card a different colour for every book, and most of
+     them turn to grey mud behind the text. */
+  background: linear-gradient(
+    100deg,
+    var(--bg-elevated) 0%,
+    color-mix(in srgb, var(--accent-soft) 55%, var(--bg-elevated)) 100%
+  );
   cursor: pointer;
   text-align: left;
-  box-shadow: 0 1px 3px var(--shadow);
+  overflow: hidden;
+  box-shadow: 0 2px 10px var(--shadow);
+  transition:
+    box-shadow 120ms ease,
+    border-color 120ms ease;
 }
 
 .continue-reading:hover {
   border-color: var(--accent);
+  box-shadow: 0 6px 20px var(--shadow);
 }
 
 .continue-cover {
-  border-radius: 4px;
-  box-shadow: 0 1px 4px var(--shadow);
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 4px 16px var(--shadow);
 }
 
 .continue-body {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
 }
 
 .continue-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--accent);
 }
 
 .continue-title {
   font-family: Georgia, serif;
-  font-size: 17px;
+  font-size: 30px;
+  line-height: 1.2;
+  margin-top: 2px;
+  /* Two lines, then ellipsis: long series titles are the norm. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.continue-author {
+  color: var(--text-secondary);
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.continue-author {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
 .continue-progress-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 12px;
+  margin-top: 18px;
+  max-width: 620px;
 }
 
 .continue-progress {
   flex: 1;
-  height: 4px;
-  border-radius: 2px;
+  height: 8px;
+  border-radius: 4px;
   background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--border);
   overflow: hidden;
 }
 
 .continue-progress-fill {
   height: 100%;
-  background: var(--teal);
+  border-radius: 4px;
+  background: var(--progress);
 }
 
 .continue-percent {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+.continue-resume {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  align-self: center;
+  padding: 12px 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.continue-reading:hover .continue-resume {
+  background: var(--accent-strong);
+}
+
+/* Narrow windows: the pill is the first thing to go, then the cover
+   shrinks. The title must never be the thing that gets squeezed out. */
+@media (max-width: 720px) {
+  .continue-resume {
+    display: none;
+  }
+
+  .continue-title {
+    font-size: 22px;
+  }
 }
 
 /* --- Book grid --- */
