@@ -64,6 +64,8 @@ export class SyncService {
         done: Promise<{ added: number; updated: number; error?: string }>
       }
     | undefined
+  /** Why the last sync failed. A sync nobody asked for still has to report. */
+  private lastError: string | undefined
 
   constructor(
     private readonly db: DatabaseSync,
@@ -260,6 +262,7 @@ export class SyncService {
     let added = 0
     let updated = 0
     let error: string | undefined
+    this.lastError = undefined
     try {
       for await (const page of catalog.listBooks()) {
         for (const remote of page) {
@@ -281,7 +284,11 @@ export class SyncService {
       this.repository.markSynced(serverId, Date.now())
     } catch (err) {
       error = (err as Error).message
+      this.lastError = error
       this.log(`sync ${serverId}: ${error}`)
+      // A failed pull did not observe the catalog, so the server must not
+      // be left claiming it synced.
+      this.caughtUp.delete(serverId)
     } finally {
       this.syncing = false
       this.emitState()
@@ -896,6 +903,7 @@ export class SyncService {
       queueSize: this.repository.queueSize(),
       syncing: this.syncing,
       conflicts: this.conflicts(),
+      ...(this.lastError ? { lastError: this.lastError } : {}),
     }
   }
 

@@ -142,6 +142,13 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
           <p class="settings-hint">
             Sync status: {state()?.syncing ? 'syncing…' : 'idle'} · {state()?.queueSize ?? 0} queued
           </p>
+          <Show when={state()?.lastError}>
+            {(err) => (
+              <p class="settings-error" role="status">
+                Last sync failed: {err()}
+              </p>
+            )}
+          </Show>
 
           <For each={state()?.servers ?? []}>
             {(server) => (

@@ -1,9 +1,18 @@
 import { test, expect, type ElectronApplication } from '@playwright/test'
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { rmSync } from 'node:fs'
 import { buildReaderEpub } from '../unit/epub-fixture'
 import { launchApp, makeTempDirs } from './helpers'
+
+/** Collects a request body, so a handler can validate what was posted. */
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    let body = ''
+    req.on('data', (c) => (body += c))
+    req.on('end', () => resolve(body))
+  })
+}
 
 /**
  * M7 end to end with a real HTTP mock Komga server (node:http, no mocks in
@@ -40,20 +49,39 @@ test.beforeAll(async () => {
       return
     }
     if (url.pathname === '/api/v1/books/list' && req.method === 'POST') {
-      res.end(
-        JSON.stringify({
-          content: [
-            {
-              id: 'komga-1',
-              name: 'The Remote Tome',
-              sizeBytes: epub.length,
-              metadata: { title: 'The Remote Tome', authors: [{ name: 'Kay Ohm' }] },
-              media: { pagesCount: 10 },
-            },
-          ],
-          last: true,
-        }),
-      )
+      // Validate the search DSL the way Komga does: every filter leaf has
+      // to be an operator object, or the real server answers 400.
+      readBody(req).then((raw) => {
+        const body = JSON.parse(raw || '{}') as {
+          condition?: { allOf?: Record<string, unknown>[] }
+        }
+        const leaves = body.condition?.allOf ?? []
+        const wellFormed =
+          leaves.length > 0 &&
+          leaves.every((leaf) =>
+            Object.values(leaf).every(
+              (v) => typeof v === 'object' && v !== null && 'operator' in v && 'value' in v,
+            ),
+          )
+        if (!wellFormed) {
+          res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"Bad Request"}')
+          return
+        }
+        res.end(
+          JSON.stringify({
+            content: [
+              {
+                id: 'komga-1',
+                name: 'The Remote Tome',
+                sizeBytes: epub.length,
+                metadata: { title: 'The Remote Tome', authors: [{ name: 'Kay Ohm' }] },
+                media: { pagesCount: 10 },
+              },
+            ],
+            last: true,
+          }),
+        )
+      })
       return
     }
     if (url.pathname === '/api/v1/books/komga-1/file') {

@@ -323,6 +323,71 @@ describe('SyncService against mock Komga', () => {
     expect(books.getById(noArt.id)?.coverId).toBeUndefined()
   })
 
+  it('asks Komga for ready EPUBs in the shape its search DSL accepts', async () => {
+    // Komga rejects a bare `{ mediaProfile: 'EPUB' }` with HTTP 400. That
+    // 400 used to end the walk quietly, so a working server showed an
+    // empty library and still reported a successful sync.
+    const bodies: string[] = []
+    const komga = mockKomga()
+    const catalog = new KomgaCatalog(
+      { id: 's1', type: 'komga', name: 'K', url: 'http://komga.test', addedAt: 0 },
+      { 'x-api-key': 'api-key-1' },
+      (url, init) => {
+        if (new URL(url).pathname === '/api/v1/books/list') bodies.push(String(init?.body))
+        return komga.fetch(url, init)
+      },
+    )
+    for await (const _page of catalog.listBooks()) void _page
+
+    const body = JSON.parse(bodies[0] ?? '{}') as {
+      condition?: { allOf?: Record<string, { operator: string; value: string }>[] }
+    }
+    const filters = body.condition?.allOf ?? []
+    expect(filters[0]?.mediaProfile).toEqual({ operator: 'is', value: 'EPUB' })
+    expect(filters[1]?.mediaStatus).toEqual({ operator: 'is', value: 'READY' })
+  })
+
+  it('a search puts its text beside the condition, not inside it', async () => {
+    const bodies: string[] = []
+    const komga = mockKomga()
+    const catalog = new KomgaCatalog(
+      { id: 's1', type: 'komga', name: 'K', url: 'http://komga.test', addedAt: 0 },
+      { 'x-api-key': 'api-key-1' },
+      (url, init) => {
+        if (new URL(url).pathname === '/api/v1/books/list') bodies.push(String(init?.body))
+        return komga.fetch(url, init)
+      },
+    )
+    for await (const _page of catalog.listBooks('dune')) void _page
+
+    const body = JSON.parse(bodies[0] ?? '{}') as Record<string, unknown>
+    expect(body.fullTextSearch).toBe('dune')
+    expect(body.condition).not.toHaveProperty('fullTextSearch')
+  })
+
+  it('a rejected catalog page fails the sync instead of emptying the shelf', async () => {
+    const komga = mockKomga()
+    const { service } = makeService((url, init) =>
+      new URL(url).pathname === '/api/v1/books/list'
+        ? Promise.resolve(jsonResponse({ error: 'Bad Request' }, 400))
+        : komga.fetch(url, init),
+    )
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    const result = await service.syncNow(server.id)
+
+    expect(result.error).toContain('400')
+    expect(result.added).toBe(0)
+    // The server must not claim it synced, and the failure has to be
+    // visible to someone who never pressed a button.
+    expect(new SyncRepository(db).listServers()[0]?.lastSyncAt).toBeUndefined()
+    expect(service.state().lastError).toContain('400')
+  })
+
   it('komga listBooks parses pages via the catalog client', async () => {
     const komga = mockKomga()
     const catalog = new KomgaCatalog(

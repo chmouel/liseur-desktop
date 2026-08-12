@@ -63,6 +63,24 @@ function parseBook(dto: KomgaBookDto): RemoteBook {
   }
 }
 
+/**
+ * The search body Komga expects.
+ *
+ * Every leaf of the condition tree is an operator object: a bare
+ * `{ mediaProfile: 'EPUB' }` is rejected with HTTP 400, which is subtle
+ * enough that it looked like a server with no books on it. Full text
+ * search sits beside the condition, not inside it.
+ */
+function listBody(query?: string): Record<string, unknown> {
+  const condition = {
+    allOf: [
+      { mediaProfile: { operator: 'is', value: 'EPUB' } },
+      { mediaStatus: { operator: 'is', value: 'READY' } },
+    ],
+  }
+  return query ? { condition, fullTextSearch: query } : { condition }
+}
+
 export class KomgaCatalog implements RemoteCatalog {
   private readonly http: Http
 
@@ -86,16 +104,19 @@ export class KomgaCatalog implements RemoteCatalog {
 
   async *listBooks(query?: string): AsyncIterable<RemoteBook[]> {
     for (let page = 0; page < MAX_PAGES; page++) {
-      const condition = {
-        allOf: [{ mediaProfile: 'EPUB' }, { mediaStatus: 'READY' }],
-        ...(query ? { fullTextSearch: query } : {}),
-      }
       const res = await this.http.request(
         'POST',
         `/api/v1/books/list?page=${page}&size=${PAGE_SIZE}&sort=metadata.titleSort,asc`,
-        { body: JSON.stringify({ condition }), headers: { 'content-type': 'application/json' } },
+        {
+          body: JSON.stringify(listBody(query)),
+          headers: { 'content-type': 'application/json' },
+        },
       )
-      if (!res.ok || !res.value) return
+      // A rejected page must not read as "the server has no books": that
+      // silence is what made a connected server show an empty library.
+      if (!res.ok || !res.value) {
+        throw new Error(res.error ?? `catalog listing failed: HTTP ${res.status}`)
+      }
       const data = await res.value.json<KomgaPageDto>()
       if (!Array.isArray(data.content) || data.content.length === 0) return
       yield data.content.map((dto) => parseBook(dto))

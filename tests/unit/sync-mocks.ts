@@ -40,6 +40,23 @@ export function mockKomga(
       return jsonResponse({ roles: ['ROLE_USER', 'FILE_DOWNLOAD'] })
     }
     if (u.pathname === '/api/v1/books/list' && init?.method === 'POST') {
+      // Komga validates the search DSL: every leaf must be an operator
+      // object. Rejecting anything else here is what keeps this mock
+      // honest about the shape the real server accepts.
+      const body = JSON.parse(String(init.body ?? '{}')) as {
+        condition?: { allOf?: Record<string, unknown>[] }
+      }
+      const leaves = body.condition?.allOf ?? []
+      const wellFormed =
+        leaves.length > 0 &&
+        leaves.every((leaf) =>
+          Object.values(leaf).every(
+            (v) => typeof v === 'object' && v !== null && 'operator' in v && 'value' in v,
+          ),
+        )
+      if (!wellFormed) {
+        return jsonResponse({ error: 'Bad Request', message: 'malformed condition' }, 400)
+      }
       const page = Number(u.searchParams.get('page') ?? '0')
       if (page === 0) counters.bookListRequests++
       const books = [

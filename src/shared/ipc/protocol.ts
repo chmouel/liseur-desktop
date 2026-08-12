@@ -50,6 +50,8 @@ export interface SyncState {
   queueSize: number
   syncing: boolean
   conflicts: SyncConflictInfo[]
+  /** Why the last sync failed, so a background one does not fail silently. */
+  lastError?: string
 }
 
 export type WorkerRequest =

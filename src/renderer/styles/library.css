@@ -285,6 +285,12 @@
   margin: 0 0 12px;
 }
 
+.settings-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: -6px 0 12px;
+}
+
 .server-row {
   display: flex;
   align-items: center;
