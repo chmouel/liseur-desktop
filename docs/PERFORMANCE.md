@@ -54,13 +54,19 @@ search round-trip.
 
 ## Measured — reader (dev machine)
 
-- Page turn: one `transform` style write — no reflow, no IPC, no DB.
+- Page turn: one `transform` style write — no reflow, no IPC, no DB. A
+  position update is fired asynchronously right after (outbox mirror +
+  worker request), but the page-turn handler never awaits it: the visual
+  update and the persistence/sync pipeline are on separate turns of the
+  event loop.
 - Chapter load: one `liseur-epub:` fetch + parse + first layout; adjacent
   cost is paid once per chapter, not per page.
 - Book open: cold extraction (unzip to `$DATA/extracted/`) tens of ms for a
   typical EPUB, off the renderer; warm opens skip it (mtime+size marker).
 - Typography/theme/column changes re-layout the current chapter only and
-  restore position by progression — no re-render of the book.
+  restore position by progression — no re-render of the book, and no
+  publish: a relayout is not reading activity (see `PositionOrigin` in
+  `engine.ts`).
 - e2e: open → paginate → TOC jump → close → reopen restores the exact
   locator (assertion on the rendered chapter and footer).
 
@@ -71,12 +77,15 @@ search round-trip.
 - In-book search streams per chapter off the EPUB zip; superseded scans stop
   immediately (explicit cancel), so fast typers never queue stale work.
 - Sync: catalog pages stream in (bookAdded per page, never a full resend);
-  progress pushes are coalesced per book into a persisted queue flushed on a
-  2 s debounce with per-target acks — page turns never wait on the network.
-  All networking runs in the worker; startup never contacts a server before
-  the window paints.
-- e2e against a real local HTTP server: full add-server → sync → download →
-  read → progress-push cycle in ~4 s.
+  each committed position enqueues into a persisted, per-book coalesced
+  queue and signals an immediate foreground drain — no timer. Only one
+  network drain runs at a time; further signals during it collapse into one
+  follow-up pass, so rapid page turns cost at most one extra round trip, not
+  one per turn. Page turns still never wait on the network: the signal
+  starts the drain asynchronously, off the page-turn handler.
+- e2e against a real local HTTP server: a real page turn reaches the mock
+  server in well under the old 2 s debounce window; full add-server → sync
+  → download → read → progress-push cycle in ~2 s.
 
 ## Rules that protect the budgets
 

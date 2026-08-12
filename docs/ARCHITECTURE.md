@@ -104,8 +104,37 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
 - Locators are Readium-compatible (href + progression/totalProgression +
   position); typography or viewport changes re-layout by progression, so
   positions survive font-size/theme/column changes.
-- Progress saves are debounced (400 ms) and fire-and-forget; the worker
-  broadcasts `bookUpdated` so the library reflects progress on return.
+- Positions carry an explicit origin (`PositionOrigin`: `user` / `restore` /
+  `relayout`) so the shell can tell real reading activity from incidental
+  engine emissions. `user` covers next/previous page, TOC, scrubber, search
+  jump, bookmark/highlight jump and in-book links; `restore` is the initial
+  `open()` landing on a saved locator; `relayout` is a resize, font-settling
+  re-measure, or typography/margin change re-laying out the current chapter.
+  Only `user` publishes — persists and syncs — the position; the others
+  update the UI's position signal but never touch storage or the network.
+- Progress publishing is immediate, not debounced: each accepted user
+  navigation synchronously refreshes the localStorage outbox and fires the
+  worker's `reader.setProgress` request without the page-turn handler
+  awaiting it (visual-first). A monotonically increasing revision guards the
+  outbox so an older acknowledgement can never clear a newer pending entry.
+
+### Application-scoped position publisher (worker)
+
+- `worker/reading-position-publisher.ts` — the worker equivalent of the
+  Android `ReadingPositionPublisher`: wired once in `worker.ts`, outside any
+  reader request handler, so a position accepted here survives the renderer
+  that sent it (the same reason Android moved this off the
+  Activity/ViewModel). `reader.setProgress` requests are handed to this
+  module instead of being persisted inline.
+- Ordering: every update is processed strictly one at a time, via a promise
+  chain, so writes commit in arrival order even when the renderer fires
+  several without awaiting one another (the shape of rapid page turns).
+- Sync only starts after commit: `SyncService.enqueueProgress` — durable
+  `sync_queue` write + foreground drain signal — runs only once the SQLite
+  write and the incremental `bookUpdated` broadcast have completed for that
+  exact update. The renderer is acknowledged only after this whole pipeline
+  finishes; a failure rejects instead of acknowledging, so the renderer's
+  outbox entry survives for replay rather than being silently dropped.
 
 ### Reader shell
 
@@ -137,10 +166,12 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
 - Scrubber: 0–1000 slider → `targetForProgression` (pure, unit-tested)
   maps to spine item + in-item progression; estimates self-correct on load.
 - Shortcuts: ←/→/Space/PgUp/PgDn turn pages, +/- font size, c columns, f/F11 fullscreen, Esc (popovers → fullscreen → library).
-- Progress durability: leading-edge + trailing saves, a revisioned
-  localStorage outbox (survives crashes; replayed on open), and a close
-  handshake — main holds window close until the worker acks the final save
-  (bounded at 5 s, released early on worker death).
+- Progress durability: immediate publish on every user navigation, a
+  revisioned localStorage outbox (survives crashes; replayed on open), and a
+  close handshake — main holds window close until the worker acks the final
+  save (bounded at 5 s, released early on worker death). The close-time
+  final write is just another publish, ordered after every earlier one by
+  the position publisher's promise chain.
 - Settings and window state live in the data dir (`LISEUR_DATA_DIR`), so
   e2e runs never touch real user settings.
 
@@ -187,32 +218,28 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   shell rows (server_id + remote_id); downloads land in `$DATA/downloads/`
   with content-hash dedupe (an existing local copy gets linked, not
   duplicated); opening a remote book downloads on demand.
-- Naming books to liseur-sync (`work-identifiers.ts`): every op the server
-  sends names a *work*, so a book it cannot name can neither receive what
-  another device left nor send what it owes — and the changes cursor moves
-  past the ops it dropped, so they never come round again. Each sync
-  therefore names the shelf first, 25 unnamed books per run, most recently
-  read first; a newly named book is asked for its position directly, once,
-  because everything that happened to it before it had a name is behind the
-  cursor. `POST /v1/works/resolve` takes an `identifiers` array and nothing
-  else will do (it answers 400 without one): sha256 of the file, the
-  catalog's own id (`komga:<id>` — the only name two devices share before
-  either has downloaded anything), the EPUB's `dc:identifier`, and title +
-  author folded to a dull normal form. That folding is a *wire contract*
-  with the Android app, which is why `work-identifiers.test.ts` is a port of
-  the phone's own test vectors. Always send every identifier: a subset can
-  resolve to a second work and split a book in two. A 409 (the identifiers
-  name more than one work) leaves the book unnamed rather than guessing.
-- Progress: every local save enqueues into `sync_queue` (coalesced per  book, persisted across restarts), flushed — serialized — on a 2 s
-  debounce, on `sync.syncNow`, and when credentials arrive. Delivery is
-  tracked per target in `sync_acks` (book × server → acked queue version);
-  a row dequeues only when every required target (catalog origin + all
-  liseur-sync servers) has acked that exact version. Reconciliation
-  (`reconcile.ts`, pure): epsilon tolerance, push/pull/adopt-status, and
-  both-changed-diverged → preserved target-scoped `sync_conflicts` row,
-  resolved from the settings UI (Use this device / Use server), cleared only
-  after the winning side is durably applied. Pull/push results distinguish
-  "missing" from "error" — reconciliation never runs on a transport error.
+- Progress: every committed local position enqueues into `sync_queue`
+  (coalesced per book — an upsert on `book_id` with a monotonically
+  increasing version, so several updates landing within the same
+  millisecond still stay distinguishable) and signals an immediate
+  foreground drain — no timer. Only one network drain runs at a time: a
+  signal that arrives while one is already draining just remembers to run
+  one more pass afterwards over the latest queued versions, so many pages
+  turned during a slow request collapse into a single follow-up rather than
+  one push per page. The queue is also flushed on `sync.syncNow` and when
+  credentials arrive, and survives restarts for when none of those run
+  before the app closes. Delivery is tracked per target in `sync_acks`
+  (book × server → acked queue version); a row dequeues only when every
+  required target (catalog origin + all liseur-sync servers) has acked that
+  exact version. Reconciliation (`reconcile.ts`, pure): epsilon tolerance,
+  push/pull/adopt-status, and both-changed-diverged → preserved
+  target-scoped `sync_conflicts` row, resolved from the settings UI (Use
+  this device / Use server), cleared only after the winning side is durably
+  applied. Pull/push results distinguish "missing" from "error" —
+  reconciliation never runs on a transport error. A retryable failure keeps
+  the persisted row for the next signal (a later page, `sync.syncNow`,
+  credentials arriving, or app reconnect/close) — there is no polling or
+  idle-timer retry.
 - Networking rules: auth headers go only to the configured origin;
   cross-origin redirects of sensitive requests are refused; responses stream
   with byte caps and a whole-exchange timeout.
