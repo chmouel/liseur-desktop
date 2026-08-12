@@ -30,13 +30,22 @@ first launch:
 xattr -dr com.apple.quarantine /Applications/Liseur.app
 ```
 
+Every file in a release is signed by the workflow that built it. If you want to
+know that a download came from this repository rather than from someone in the
+middle:
+
+```
+gh attestation verify <file> --repo chmouel/liseur-desktop
+```
+
 ## DEVELOPMENT
 
 [DESIGN.md](DESIGN.md) covers what it is and where it came from.
 [ARCHITECTURE.md](ARCHITECTURE.md) explains how the three processes divide
 the work between them, and [PERFORMANCE.md](PERFORMANCE.md) gives the
 budgets they are held to. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) is for
-working on the code.
+working on the code, and [SECURITY.md](SECURITY.md) covers how the project
+treats its dependencies and how to report a vulnerability.
 
 ## License
 

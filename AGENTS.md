@@ -25,7 +25,12 @@ updated as milestones progress (status changes, scope changes, decisions).
     instrumentation (`localStorage.liseurPerf = '1'`).
 11. Do not add dependencies casually. Check: does a browser/Node API already
     solve it? Is it maintained? How big is it? Does it run at startup?
-    Document performance-sensitive additions in PERFORMANCE.md.
+    Document performance-sensitive additions in PERFORMANCE.md. A dependency
+    is also a supply-chain liability: it must be installable under the
+    fourteen-day cooldown in `pnpm-workspace.yaml`, must not need an install
+    script (adding a name to `allowBuilds` requires a written justification in
+    the pull request), and must come from the registry rather than a git URL
+    or a tarball. See SECURITY.md.
 12. Prefer incremental updates (per-book events) over replacing entire
     datasets or re-sending the whole library over IPC.
 13. An idle application must perform no recurring work — no polling timers
