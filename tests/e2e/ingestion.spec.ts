@@ -27,12 +27,30 @@ async function launch(dataDir: string): Promise<ElectronApplication> {
   return app
 }
 
+test('a fresh install opens onto an empty library', async () => {
+  // The app used to fill any empty database with 10,000 generated books, so
+  // a brand-new install — or a user who reset their data — was greeted by a
+  // library full of titles that do not exist. The fake dataset is for
+  // measuring the grid against its perf budget and must be asked for.
+  const dataDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-fresh-'))
+  let app: ElectronApplication | undefined
+  try {
+    app = await launch(dataDir)
+    const page = await app.firstWindow()
+    await expect(page.locator('.empty-state')).toHaveText('No books here yet.')
+    await expect(page.locator('.book-card')).toHaveCount(0)
+  } finally {
+    await app?.close()
+    rmSync(dataDir, { recursive: true, force: true })
+  }
+})
+
 test('startup folder rescan ingests a new EPUB', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-ingest-'))
   const booksDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-books-'))
   let app: ElectronApplication | undefined
   try {
-    // Phase 1: create the app's database (migrations + dev seed).
+    // Phase 1: create the app's database (migrations only).
     app = await launch(dataDir)
     await app.close()
 

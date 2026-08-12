@@ -25,7 +25,8 @@ import { seedLibraryIfEmpty } from './library/seed'
  * Environment contract (set by main in worker-host.ts):
  *   LISEUR_DATA_DIR          — where liseur.db lives (required)
  *   LISEUR_SEED_FAKE_LIBRARY — '1' seeds an empty DB with the deterministic
- *                              fake dataset (dev/test only, until M3)
+ *                              10,000-book fake dataset, for perf work.
+ *                              Off unless asked for, including in dev.
  */
 
 function initLibrary(): {

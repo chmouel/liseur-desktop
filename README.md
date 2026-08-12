@@ -58,6 +58,15 @@ WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -c /tmp/sway-headless.conf 
 env -u DISPLAY WAYLAND_DISPLAY=wayland-2 pnpm test:e2e
 ```
 
+The app always starts with whatever books you have added — it never invents
+any. To measure the library grid against its perf budget you can ask for a
+deterministic 10,000-book dataset, which is only ever added to a library that
+is still empty:
+
+```bash
+LISEUR_SEED_FAKE_LIBRARY=1 pnpm dev
+```
+
 ## Architecture
 
 Three strictly separated process layers:

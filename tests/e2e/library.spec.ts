@@ -13,9 +13,10 @@ import { join } from 'node:path'
  * End-to-end smoke tests against the production build (run `pnpm build`
  * first; CI does). Electron tests run with workers=1 (see config).
  *
- * Each run gets a throwaway data directory: the worker seeds the fresh
- * SQLite database with the deterministic 10,000-book dataset, and the tests
- * never touch the developer's real library.
+ * Each run gets a throwaway data directory and explicitly asks for the
+ * deterministic 10,000-book dataset — the app itself never seeds it, so the
+ * request has to be made here. The tests never touch the developer's real
+ * library.
  */
 
 let app: ElectronApplication
@@ -26,7 +27,12 @@ test.beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-'))
   app = await electron.launch({
     args: ['.'],
-    env: { ...process.env, NODE_ENV: 'test', LISEUR_DATA_DIR: dataDir },
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      LISEUR_DATA_DIR: dataDir,
+      LISEUR_SEED_FAKE_LIBRARY: '1',
+    },
   })
   page = await app.firstWindow()
   await page.waitForSelector('.library-screen')

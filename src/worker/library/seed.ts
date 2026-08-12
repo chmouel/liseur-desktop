@@ -3,10 +3,13 @@ import { generateFakeLibrary } from './fake-dataset'
 import { BookRepository } from './book-repository'
 
 /**
- * Development seed. Real EPUB ingestion arrives in Milestone 3; until then a
- * fresh database would leave the library empty and untestable. Seeding uses
- * the deterministic fake dataset and only ever runs on an empty database
- * when explicitly enabled (main enables it for unpackaged builds).
+ * Perf-testing seed. Books arrive by real EPUB ingestion (M3); this exists
+ * only to fill a library with enough entries to measure the grid,
+ * virtualization and search against their budgets (see PERFORMANCE.md).
+ *
+ * It never runs unless LISEUR_SEED_FAKE_LIBRARY=1 is set, and never on a
+ * database that already holds books — a fresh install must open onto an
+ * empty library, not onto thousands of books that do not exist.
  */
 
 export const SEED_LIBRARY_SIZE = 10_000

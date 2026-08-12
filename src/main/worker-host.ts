@@ -30,11 +30,12 @@ export function startWorker(): UtilityProcess {
       // database lives. LISEUR_DATA_DIR overrides it (used by e2e tests for
       // a hermetic, throwaway library).
       LISEUR_DATA_DIR: dataDir(),
-      // Until EPUB ingestion exists (M3), unpackaged builds seed an empty
-      // database with the deterministic fake dataset so the app stays
-      // testable. Packaged builds start with an empty library.
-      LISEUR_SEED_FAKE_LIBRARY:
-        process.env.LISEUR_SEED_FAKE_LIBRARY ?? (app.isPackaged ? '0' : '1'),
+      // The 10,000-book fake dataset exists to measure the library screen
+      // against its perf budget; it is never seeded unless asked for. Real
+      // EPUB ingestion has been the way books arrive since M3, and seeding
+      // by default meant a fresh install opened onto a library full of
+      // books that do not exist.
+      LISEUR_SEED_FAKE_LIBRARY: process.env.LISEUR_SEED_FAKE_LIBRARY ?? '0',
     },
   })
 
