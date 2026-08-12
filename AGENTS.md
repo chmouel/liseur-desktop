@@ -1,9 +1,8 @@
 # AGENTS.md — Engineering constraints for coding agents
 
 You are working on **Liseur Desktop**, a desktop EPUB reader whose defining
-quality is **snappiness**. Read this file and [DESIGN.md](DESIGN.md) (the
-roadmap and design document) before changing anything, and keep DESIGN.md
-updated as milestones progress (status changes, scope changes, decisions).
+quality is **snappiness**. Read this file and [DESIGN.md](DESIGN.md) before
+changing anything, and keep DESIGN.md updated as the design changes.
 
 ## Non-negotiable rules
 

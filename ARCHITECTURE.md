@@ -16,8 +16,8 @@ block the renderer or delay startup**.
 │   lifecycle, windows, menu, port forwarding, settings    │
 ├──────────────────────────────────────────────────────────┤
 │ Worker (Electron utilityProcess, isolated Node)          │
-│   all expensive work: SQLite library now; EPUB parsing,  │
-│   scanning, search indexing, server sync later           │
+│   all expensive work: SQLite library, EPUB parsing,      │
+│   scanning, search indexing, server sync                 │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -62,7 +62,7 @@ seed an empty database with the deterministic fake dataset
 (`library/seed.ts`, gated by `LISEUR_SEED_FAKE_LIBRARY`); packaged builds
 start empty.
 
-### EPUB ingestion (M3)
+### EPUB ingestion
 
 - `epub/zip.ts` — minimal read-only ZIP (stored/deflate via `node:zlib`);
   rejects encrypted, multi-disk and ZIP64 archives.
@@ -70,8 +70,8 @@ start empty.
   no built-in XML parser; the worker has no DOM).
 - `epub/epub.ts` — OPF metadata (title, creators, `dc:identifier`) and cover
   resolution (EPUB 3 `cover-image` property, EPUB 2 `<meta name="cover">`,
-  first-image fallback). Engine-agnostic, independent of the M4 reader
-  choice.
+  first-image fallback). Engine-agnostic, independent of the reader
+  implementation.
 - `library/ingestion.ts` — hashing, duplicate detection (content hash, then
   OPF identifier), cover cache (content-addressed, write-once files under
   `$LISEUR_DATA_DIR/covers/`), recursive folder scans. Scans are async and
@@ -84,7 +84,7 @@ start empty.
   (`main/covers.ts`): pure static file serving streamed by Chromium — no
   base64 over IPC, no image decode outside the renderer.
 
-### Reader (M4)
+### Reader
 
 - `library/open-book.ts` (worker) — opens a book: extracts the EPUB once
   into `$LISEUR_DATA_DIR/extracted/<bookId>/` (reused via an mtime+size
@@ -95,8 +95,8 @@ start empty.
   `script-src 'none'` CSP. Registered `standard + secure + corsEnabled +
 supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   `file://` origin.
-- `renderer/reader/engine.ts` — the `ReaderEngine` interface (chosen behind
-  ADR 0001) and `ColumnEngine`: one sandboxed iframe (`allow-same-origin`
+- `renderer/reader/engine.ts` — the `ReaderEngine` interface and
+  `ColumnEngine`: one sandboxed iframe (`allow-same-origin`
   only — book scripts never run), chapters loaded as `srcdoc` with a
   `<base>` onto `liseur-epub:` (no URL rewriting), pagination via CSS
   multi-columns + a single transform write per page turn.
@@ -107,7 +107,7 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
 - Progress saves are debounced (400 ms) and fire-and-forget; the worker
   broadcasts `bookUpdated` so the library reflects progress on return.
 
-### Reader shell (M5)
+### Reader shell
 
 - Chrome auto-hides after 2.5 s idle ("hidden reading mode") — opacity-only,
   no layout shift, so the book never re-paginates when chrome toggles.
@@ -144,7 +144,7 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
 - Settings and window state live in the data dir (`LISEUR_DATA_DIR`), so
   e2e runs never touch real user settings.
 
-### Annotations & in-book search (M6)
+### Annotations & in-book search
 
 - Schema v3: `annotations` (highlight | bookmark) with JSON locators;
   `AnnotationRepository` in the worker; annotations ride along with
@@ -165,7 +165,7 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   normalized text, ≤500 matches, batches stream per item over the port;
   results carry quotes that the engine re-anchors with a flash on jump.
 
-### Remote catalogs & sync (M7)
+### Remote catalogs & sync
 
 - `worker/sync/` — capability interface `RemoteCatalog` (testConnection,
   streaming listBooks, download, fetchCover, pull/pushProgress,

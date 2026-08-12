@@ -23,7 +23,7 @@ The e2e suite (`pnpm test:e2e`) includes a perf smoke test: with 5,000 books
 it asserts the DOM stays virtualized (bounded card count) and measures the
 search round-trip.
 
-## Measured (Milestone 1, dev machine, 5,000 fake books)
+## Measured — library prototype (dev machine, 5,000 fake books)
 
 - App shell render: immediate (window shows on `ready-to-show`).
 - Library query round-trip through the worker: single-digit ms.
@@ -31,7 +31,7 @@ search round-trip.
 - DOM nodes while scrolling 5,000 books: bounded (~275 cards worst case on
   a large window), independent of library size.
 
-## Measured (Milestone 2, dev machine, 10,000 seeded books in SQLite)
+## Measured — SQLite library (dev machine, 10,000 seeded books)
 
 - Migration to schema v1: <1 ms; dev seed of 10,000 books: ~50 ms, both in
   the worker while the window is already painting.
@@ -40,7 +40,7 @@ search round-trip.
 - Search round-trip incl. 80 ms debounce: ~160 ms end-to-end in e2e.
 - DOM nodes while scrolling: unchanged, bounded (~275 cards worst case).
 
-## Measured (Milestone 3, dev machine)
+## Measured — EPUB ingestion (dev machine)
 
 - Ingesting one EPUB (read + sha256 + ZIP/OPF parse + cover cache write):
   single-digit ms; scans yield between books so library queries interleave.
@@ -52,7 +52,7 @@ search round-trip.
 - Cover cache is content-addressed and write-once: re-ingests and books
   sharing a cover cost zero extra disk writes.
 
-## Measured (Milestone 4, dev machine)
+## Measured — reader (dev machine)
 
 - Page turn: one `transform` style write — no reflow, no IPC, no DB.
 - Chapter load: one `liseur-epub:` fetch + parse + first layout; adjacent
@@ -64,7 +64,7 @@ search round-trip.
 - e2e: open → paginate → TOC jump → close → reopen restores the exact
   locator (assertion on the rendered chapter and footer).
 
-## Measured (Milestones 6–7, dev machine)
+## Measured — annotations, search & sync (dev machine)
 
 - Highlights render via the CSS Custom Highlight API: zero DOM mutation, no
   relayout on render or on typography change (ranges are content-anchored).
@@ -95,7 +95,7 @@ Performance-sensitive notes:
 
 - `solid-js` — chosen for fine-grained reactivity (no VDOM diffing), which
   keeps list updates cheap.
-- `node:sqlite` (M2) — Node's built-in SQLite, used from the worker only.
+- `node:sqlite` — Node's built-in SQLite, used from the worker only.
   Avoids a native npm dependency (better-sqlite3) that would need rebuilding
   against Electron headers. Synchronous access is safe there: the worker is
   a separate process, so queries never block the renderer.
