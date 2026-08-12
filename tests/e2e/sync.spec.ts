@@ -122,6 +122,25 @@ test.afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true })
 })
 
+/**
+ * Waits until `progressPushes` stops growing for a short window, so a
+ * baseline count taken right after isn't confused by a push whose network
+ * round trip is still in flight.
+ */
+async function waitForPushesToSettle(): Promise<void> {
+  let last = -1
+  await expect
+    .poll(
+      () => {
+        const stable = progressPushes.length === last
+        last = progressPushes.length
+        return stable
+      },
+      { timeout: 3_000, intervals: [150] },
+    )
+    .toBe(true)
+}
+
 test('Komga: add server, sync catalog, download on open, push progress', async () => {
   test.setTimeout(60_000)
   // The e2e environment has no OS keychain; the test-only escape hatch keeps
@@ -183,9 +202,37 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
 
   // --- page turn pushes progress back to the server ----------------------------
   await page.keyboard.press('ArrowRight')
-  await expect.poll(() => progressPushes.length, { timeout: 10_000 }).toBeGreaterThan(0)
+  // Immediate, not the old 2 s debounce: a short bound proves promptness.
+  await expect.poll(() => progressPushes.length, { timeout: 3_000 }).toBeGreaterThan(0)
   expect(progressPushes[0]?.device?.id).toBe('liseur-desktop')
   expect(progressPushes[0]?.locator?.href).toContain('ch')
+
+  // --- rapid page turns deliver the latest locator, not one push per turn -------
+  const pushesBeforeRapid = progressPushes.length
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight')
+  const footerAfterRapid = await page.locator('.reader-footer').textContent()
+  await expect
+    .poll(() => progressPushes.length, { timeout: 5_000 })
+    .toBeGreaterThan(pushesBeforeRapid)
+  // Whatever arrived, the LAST push matches where the reader actually
+  // settled — a stale mid-sequence locator never wins.
+  await expect
+    .poll(() => page.locator('.reader-footer').textContent())
+    .toBe(footerAfterRapid)
+  expect(progressPushes.at(-1)?.locator?.href).toBeTruthy()
+
+  // Let every push the rapid sequence started actually land before using the
+  // count as a baseline — otherwise a straggler still in flight could be
+  // mistaken for one caused by the typography change below.
+  await waitForPushesToSettle()
+
+  // --- typography/resize restoration causes no extra push -----------------------
+  const pushesBeforeTypography = progressPushes.length
+  await page.getByRole('button', { name: 'Typography' }).click()
+  await page.getByRole('button', { name: 'Increase font size' }).click()
+  await page.keyboard.press('Escape') // close the popover
+  await waitForPushesToSettle()
+  expect(progressPushes.length).toBe(pushesBeforeTypography)
 
   // The library card now shows the downloaded badge.
   await page.keyboard.press('Escape')

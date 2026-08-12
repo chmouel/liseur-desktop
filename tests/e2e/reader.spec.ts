@@ -32,8 +32,13 @@ test.beforeAll(async () => {
 
   // Phase 1: let the app create its database, then register the folder.
   await installBooks(dataDir, booksDir, {
-    'reader.epub': buildReaderEpub({ chapters: 3 }),
-    'second.epub': buildReaderEpub({ chapters: 3, title: 'Second Tome' }),
+    // words:2000 gives several pages per chapter — enough room to turn
+    // pages repeatedly without reaching the true end of the book (reaching
+    // it is real reading activity too, and marks the book finished, which
+    // would hide it from Continue Reading; that is covered separately in
+    // reader-worker.test.ts).
+    'reader.epub': buildReaderEpub({ chapters: 3, words: 2000 }),
+    'second.epub': buildReaderEpub({ chapters: 3, words: 2000, title: 'Second Tome' }),
   })
 })
 
@@ -53,9 +58,12 @@ test('opens, paginates, persists and restores progress', async () => {
     await expect(page.locator('.reader-percent')).toContainText('%')
 
     // Turn pages until the position actually moves (chapter count is small,
-    // so a few turns cross into chapter 2).
+    // so a few turns cross into chapter 2). Deliberately short of the book's
+    // end: reaching it is real reading activity too, and marks the book
+    // finished (a separate, correctly persisted concern — see
+    // reader-worker.test.ts) which would hide it from Continue Reading.
     const before = await page.locator('.reader-footer').textContent()
-    for (let i = 0; i < 12; i++) await page.keyboard.press('ArrowRight')
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight')
     await expect
       .poll(() => page.locator('.reader-footer').textContent(), { timeout: 10_000 })
       .not.toBe(before)
@@ -64,8 +72,9 @@ test('opens, paginates, persists and restores progress', async () => {
     await page.getByRole('button', { name: 'Table of contents' }).click()
     await page.getByRole('button', { name: 'Chapter 3' }).click()
     await expect(iframe.locator('h1')).toHaveText('Chapter 3', { timeout: 10_000 })
-    // Let the progress save (debounced 400ms) land before closing.
-    await page.waitForTimeout(700)
+    // TOC navigation is user-originated: it publishes immediately (no
+    // debounce), so the close-time handshake below persists this exact
+    // position without needing to wait for it to land first.
     const atChapter3 = await page.locator('.reader-footer').textContent()
 
     // Close → Continue Reading shows the book; progress persisted.
