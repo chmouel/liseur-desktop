@@ -674,6 +674,59 @@ describe('SyncService against mock Komga', () => {
     expect(books.getById(synced.id)?.progress?.progression).toBeCloseTo(0.8)
   })
 
+  it('corrects a date the server could not have written', async () => {
+    // Defending ourselves is not enough: every other device still reads the
+    // impossible date off the server. Once we know our own position is the
+    // trustworthy one, we send it back up so the record stops lying — even
+    // though the two positions agree and there is nothing else to say.
+    const future = Date.now() + 3 * 3_600_000
+    const puts: { modified: string }[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        return jsonResponse({
+          content: [
+            {
+              id: 'book-1',
+              name: 'Guidebook',
+              metadata: { title: 'Guidebook', authors: [] },
+              media: { pagesCount: 100 },
+              readProgress: { page: 27, completed: false },
+            },
+          ],
+          last: true,
+        })
+      }
+      if (path.endsWith('/progression')) {
+        if (init?.method === 'PUT') {
+          puts.push(JSON.parse(String(init.body)) as { modified: string })
+          return jsonResponse({}, 204)
+        }
+        return jsonResponse({
+          locator: { href: 'ch1.xhtml', locations: { totalProgression: 0.27 } },
+          modified: new Date(future).toISOString(),
+        })
+      }
+      return jsonResponse({}, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+    await service.syncNow(server.id)
+
+    expect(puts.length).toBeGreaterThan(0)
+    for (const put of puts) {
+      expect(Date.parse(put.modified)).toBeLessThanOrEqual(Date.now())
+    }
+  })
+
   it('a sync of an untouched shelf does not ask about every book', async () => {
     // Komga puts read progress on every book in a listing page, so asking
     // again book by book is a round trip per book on every single sync: on

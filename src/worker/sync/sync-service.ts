@@ -417,6 +417,11 @@ export class SyncService {
     target?: { serverId: string; remoteId: string },
   ): Promise<void> {
     const remote = withSaneTimestamp(remoteRecord)
+    // The server is holding a date that cannot be true. Ignoring it protects
+    // us, but every other device still reads it, so send our position back up
+    // to overwrite it even when the two positions already agree.
+    const serverDateIsImpossible =
+      remoteRecord?.updatedAt !== undefined && remote?.updatedAt === undefined
     const localBook = this.books.getById(bookId)
     if (!localBook) return
     const local: ProgressRecord | null = localBook.progress
@@ -488,6 +493,14 @@ export class SyncService {
         }
         break
       case 'none':
+        if (serverDateIsImpossible && local?.locator) {
+          this.repository.enqueue(
+            bookId,
+            local.locator,
+            local.progression,
+            local.updatedAt ?? Date.now(),
+          )
+        }
         break
     }
   }
