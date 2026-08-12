@@ -352,11 +352,7 @@ export async function liseurSyncLogin(
     return { ok: false, detail: 'sign-in answered without a credential' }
   }
 
-  const mintWith = new Http(
-    serverUrl,
-    { authorization: `Bearer ${session.auth_token}` },
-    fetchImpl,
-  )
+  const mintWith = new Http(serverUrl, { authorization: `Bearer ${session.auth_token}` }, fetchImpl)
   const mint = await mintWith.request('POST', '/v1/tokens', {
     body: JSON.stringify({ name: 'liseur-desktop', scope: 'sync' }),
     headers: { 'content-type': 'application/json' },
@@ -419,7 +415,8 @@ export async function liseurSyncMintInsightsToken(
     body: JSON.stringify({ name: 'liseur-desktop (statistics)', scope: 'read-insights' }),
     headers: { 'content-type': 'application/json' },
   })
-  if (!mint.ok || !mint.value) return { ok: false, detail: await describe('statistics token', mint) }
+  if (!mint.ok || !mint.value)
+    return { ok: false, detail: await describe('statistics token', mint) }
   const data = await mint.value.json<{ secret?: string; token?: string }>()
   const token = data.secret ?? data.token
   return token ? { ok: true, token } : { ok: false, detail: 'statistics token came back empty' }

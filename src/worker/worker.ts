@@ -86,7 +86,8 @@ function initLibrary(): {
       library.setProgress(bookId, locator, progression, when),
     recordSession: (bookId, at, progression) => sessions.record(bookId, at, progression),
     enqueueSync: (book, locator, progression) => sync.enqueueProgress(book, locator, progression),
-    onBookUpdated: (book) => broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book } }),
+    onBookUpdated: (book) =>
+      broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book } }),
     log: (message) => console.error(`[worker] ${message}`),
   })
 
@@ -322,9 +323,7 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
       break
     case 'stats.get':
       void readingStats()
-        .then((figures) =>
-          send(port, { kind: 'stats.get.result', id: request.id, stats: figures }),
-        )
+        .then((figures) => send(port, { kind: 'stats.get.result', id: request.id, stats: figures }))
         .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
     case 'sync.enableStats':

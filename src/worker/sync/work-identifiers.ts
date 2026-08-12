@@ -43,7 +43,10 @@ const USELESS_IDENTIFIERS = new Set([
  */
 function fold(text: string | undefined): string | null {
   if (!text || text.trim() === '') return null
-  const flattened = text.normalize('NFKD').replace(/\p{Mn}+/gu, '').toLowerCase()
+  const flattened = text
+    .normalize('NFKD')
+    .replace(/\p{Mn}+/gu, '')
+    .toLowerCase()
   let kept = ''
   // Walked by UTF-16 unit rather than by code point, because the phone walks
   // Kotlin `Char`s: an astral character collapses to a space there, and has

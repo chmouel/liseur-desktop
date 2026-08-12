@@ -216,9 +216,7 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
     .toBeGreaterThan(pushesBeforeRapid)
   // Whatever arrived, the LAST push matches where the reader actually
   // settled — a stale mid-sequence locator never wins.
-  await expect
-    .poll(() => page.locator('.reader-footer').textContent())
-    .toBe(footerAfterRapid)
+  await expect.poll(() => page.locator('.reader-footer').textContent()).toBe(footerAfterRapid)
   expect(progressPushes.at(-1)?.locator?.href).toBeTruthy()
 
   // Let every push the rapid sequence started actually land before using the

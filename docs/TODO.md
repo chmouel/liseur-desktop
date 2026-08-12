@@ -25,7 +25,7 @@ retired milestone roadmap against what actually exists in `src/`.
 ## Packaging
 
 - **Real Windows installer.** `electron-builder.json` builds `win.target:
-  dir` only — no NSIS or other installer.
+dir` only — no NSIS or other installer.
 - **Auto-update.** No `electron-updater` or equivalent is wired up.
 - **Code signing.** Builds are unsigned (`mac.identity: null`). Note: this
   one is a deliberate, argued-for tradeoff in `SECURITY.md` ("no

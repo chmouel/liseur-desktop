@@ -187,8 +187,8 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
                   </span>
                   <Show when={server.type === 'liseur-sync' && !server.sharesStats}>
                     <span class="server-detail">
-                      Statistics are not shared with this server, so reading totals only count
-                      this computer.{' '}
+                      Statistics are not shared with this server, so reading totals only count this
+                      computer.{' '}
                       <Show
                         when={statsFor() === server.id}
                         fallback={

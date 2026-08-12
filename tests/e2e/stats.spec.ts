@@ -26,8 +26,7 @@ function seedSessions(
 function bookIdOf(dataDir: string, title: string): string {
   const db = new DatabaseSync(join(dataDir, 'liseur.db'), { readOnly: true })
   const row = db.prepare('SELECT id FROM books WHERE title = ?').get(title) as
-    | { id: string }
-    | undefined
+    { id: string } | undefined
   db.close()
   if (!row) throw new Error(`no book titled ${title}`)
   return row.id

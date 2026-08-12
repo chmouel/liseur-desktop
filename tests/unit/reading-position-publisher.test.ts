@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Book, Locator } from '../../src/shared/domain/types'
-import { ReadingPositionPublisher, type PositionUpdate } from '../../src/worker/reading-position-publisher'
+import {
+  ReadingPositionPublisher,
+  type PositionUpdate,
+} from '../../src/worker/reading-position-publisher'
 
 /**
  * `ReadingPositionPublisher` unit tests, mirroring the Android
@@ -117,7 +120,7 @@ describe('ReadingPositionPublisher', () => {
     expect(commits).toBe(1)
   })
 
-  it("the close write (just another publish) follows every earlier write for the same book", async () => {
+  it('the close write (just another publish) follows every earlier write for the same book', async () => {
     const order: string[] = []
     const publisher = new ReadingPositionPublisher({
       setProgress: (bookId, locator) => {

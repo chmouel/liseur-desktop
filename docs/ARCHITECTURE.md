@@ -256,7 +256,7 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   `ReadingStatsRepository` supplies the rows; `mergeServerStats` folds in a
   server's figures.
 - Aggregation matches the Android app: a liseur-sync server counts the same
-  reading seen from every device, so where it answers it *replaces* the
+  reading seen from every device, so where it answers it _replaces_ the
   local figure rather than being added to it (adding would count this
   machine twice). `/v1/insights/summary` gives the headline total, sittings
   and streak; `/v1/insights/calendar` the week chart; `/v1/insights/works`

@@ -20,11 +20,7 @@ import {
 import { SyncRepository } from './sync-repository'
 import type { FetchLike } from './http'
 import type { ProgressRecord, RemoteBook, RemoteCatalog, RemoteServer, TestResult } from './types'
-import {
-  sourceIdentifier,
-  workIdentifiers,
-  type WorkIdentifier,
-} from './work-identifiers'
+import { sourceIdentifier, workIdentifiers, type WorkIdentifier } from './work-identifiers'
 
 /**
  * Sync orchestration (M7). Catalog sync streams remote books into local
@@ -422,10 +418,7 @@ export class SyncService {
    * server to sign in again would unlink every book from it, so this asks
    * for the password once and mints the second credential in place.
    */
-  async enableStats(
-    serverId: string,
-    password: string,
-  ): Promise<{ ok: boolean; detail?: string }> {
+  async enableStats(serverId: string, password: string): Promise<{ ok: boolean; detail?: string }> {
     const server = this.repository.getServer(serverId)
     if (!server || server.type !== 'liseur-sync') return { ok: false, detail: 'no such server' }
     const credentials = this.credentials.get(serverId)

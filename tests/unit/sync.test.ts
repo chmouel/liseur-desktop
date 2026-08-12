@@ -11,10 +11,7 @@ import { KomgaCatalog } from '../../src/worker/sync/komga'
 import { SyncRepository } from '../../src/worker/sync/sync-repository'
 import { BookRepository } from '../../src/worker/library/book-repository'
 import { ReadingSessionRepository } from '../../src/worker/library/reading-sessions'
-import {
-  ReadingStatsRepository,
-  mergeServerStats,
-} from '../../src/worker/library/reading-stats'
+import { ReadingStatsRepository, mergeServerStats } from '../../src/worker/library/reading-stats'
 import { SyncService } from '../../src/worker/sync/sync-service'
 import type { FetchLike } from '../../src/worker/sync/http'
 import type { Book } from '../../src/shared/domain/types'
@@ -1404,7 +1401,12 @@ describe('SyncService against mock Komga', () => {
         if (headers['authorization'] !== 'Bearer secret-for-read-insights') {
           return jsonResponse({ error: 'insufficient scope' }, 403)
         }
-        return jsonResponse({ range_days: 30, total_active_minutes: 60, sessions: 3, streak_days: 1 })
+        return jsonResponse({
+          range_days: 30,
+          total_active_minutes: 60,
+          sessions: 3,
+          streak_days: 1,
+        })
       }
       return jsonResponse({ error: 'not found' }, 404)
     }

@@ -72,6 +72,7 @@ test('opens, paginates, persists and restores progress', async () => {
     await page.getByRole('button', { name: 'Table of contents' }).click()
     await page.getByRole('button', { name: 'Chapter 3' }).click()
     await expect(iframe.locator('h1')).toHaveText('Chapter 3', { timeout: 10_000 })
+    await expect(page.locator('.reader-footer')).toContainText('Chapter 3')
     // TOC navigation is user-originated: it publishes immediately (no
     // debounce), so the close-time handshake below persists this exact
     // position without needing to wait for it to land first.
