@@ -18,6 +18,10 @@ export function createMainWindow(): BrowserWindow {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
+    // The menu bar is a strip of chrome above a page of text, and everything
+    // in it has a keyboard shortcut. It stays out of the way until Alt asks
+    // for it. (macOS is unaffected: the menu lives in the system bar there.)
+    autoHideMenuBar: true,
     backgroundColor: state.dark ? '#17130e' : '#ffffff',
     webPreferences: {
       preload: join(dir, '../preload/preload.cjs'),

@@ -180,3 +180,28 @@ test('perf: 10,000-book library is virtualized and fast', async () => {
   console.log(`search round-trip: ${elapsed}ms`)
   expect(elapsed).toBeLessThan(2000) // generous CI bound; dev machines show <100ms
 })
+
+test('the menu bar stays out of the way until Alt asks for it', async () => {
+  // Everything in the menu has a keyboard shortcut, so the strip of chrome
+  // above the shelf is hidden until it is wanted. macOS keeps its menu in
+  // the system bar and is not affected either way.
+  const bar = await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]!
+    return { autoHide: win.autoHideMenuBar, visible: win.isMenuBarVisible() }
+  })
+  expect(bar.autoHide).toBe(true)
+  if (process.platform !== 'darwin') expect(bar.visible).toBe(false)
+})
+
+test('the menu keeps its accelerators while it is hidden', async () => {
+  // A hidden menu that no longer answers to Ctrl+, would just be a missing
+  // feature. The item still exists and still carries its shortcut.
+  const settings = await app.evaluate(({ Menu }) => {
+    const item = Menu.getApplicationMenu()
+      ?.items.find((i) => i.label === 'File')
+      ?.submenu?.items.find((i) => i.label.startsWith('Settings'))
+    return { found: item !== undefined, accelerator: item?.accelerator }
+  })
+  expect(settings.found).toBe(true)
+  expect(settings.accelerator).toBe('CmdOrCtrl+,')
+})
