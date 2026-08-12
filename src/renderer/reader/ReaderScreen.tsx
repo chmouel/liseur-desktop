@@ -42,11 +42,11 @@ import { normalizeText } from './anchoring'
  * The M5 reader shell. Chrome auto-hides into "hidden reading mode" after a
  * few idle seconds (mouse movement, a key press, or a center tap brings it
  * back). Visual-first rules apply: page turns never wait on persistence;
- * progress saves are leading-edge + debounced, mirrored to a localStorage
- * outbox, and flushed through a close-time handshake with main.
+ * a real navigation publishes immediately (outbox mirror + worker request,
+ * not awaited by the caller), and the close-time handshake flushes the
+ * final position and any pending note.
  */
 
-const PROGRESS_SAVE_DEBOUNCE_MS = 400
 const CHROME_HIDE_DELAY_MS = 2500
 
 export function ReaderScreen(props: { bookId: string; onClose: () => void }): JSX.Element {
@@ -219,20 +219,19 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
 
   let engine: ReaderEngine | undefined
   let viewport: HTMLElement | undefined
-  let saveTimer: ReturnType<typeof setTimeout> | undefined
   let hideTimer: ReturnType<typeof setTimeout> | undefined
-  let lastSavedAt = 0
   let disposed = false
 
   const percent = () => Math.round((position()?.totalProgression ?? 0) * 1000) / 10
 
-  // --- progress persistence (outbox + handshake; see M4 review) ----------
-
-  function scheduleSave(): void {
-    clearTimeout(saveTimer)
-    if (Date.now() - lastSavedAt > 2000) void saveProgress()
-    saveTimer = setTimeout(() => void saveProgress(), PROGRESS_SAVE_DEBOUNCE_MS)
-  }
+  // --- progress persistence (outbox + handshake; see M4 review) -----------
+  //
+  // Every user-originated navigation (see engine.ts PositionOrigin) publishes
+  // immediately: the outbox is refreshed and the worker request fires
+  // without the page-turn handler awaiting it (visual-first). There is no
+  // debounce — the worker's position publisher processes writes in arrival
+  // order and signals sync only after each commits, so firing on every turn
+  // does not risk out-of-order persistence, and rapid turns simply queue.
 
   let saveRevision = 0
 
@@ -263,17 +262,14 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     const info = eng.pageInfo()
     const locator = eng.locator()
     const progression = info.endOfBook ? 1 : info.totalProgression
-    lastSavedAt = Date.now()
+    const at = Date.now()
     // Outbox: the latest position is synchronously mirrored to localStorage
     // before the async IPC save, so even a hard crash loses nothing. The
     // outbox write is best-effort — storage failures (quota, privacy modes)
     // must never block the database save.
     const rev = ++saveRevision
     try {
-      localStorage.setItem(
-        pendingKey(),
-        JSON.stringify({ rev, locator, progression, at: lastSavedAt }),
-      )
+      localStorage.setItem(pendingKey(), JSON.stringify({ rev, locator, progression, at }))
     } catch {
       // storage unavailable: the worker save below still runs
     }
@@ -285,9 +281,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     }
   }
 
-  async function saveProgress(): Promise<void> {
+  /** Fire-and-forget publish for a user-originated position change: never
+   *  awaited by the caller, so the visual page turn is never blocked on it. */
+  function publishPosition(): void {
     if (!engine || disposed) return
-    await persistPosition(engine)
+    void persistPosition(engine)
   }
 
   function readPending(): PendingProgress | null {
@@ -721,13 +719,15 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   }
 
   function close(): void {
-    clearTimeout(saveTimer)
     cancelActiveSearch()
     const finalEngine = engine
     engine = undefined
     props.onClose() // visual first — never waits on persistence
     // Durable exit: persist the captured final position and any pending note
     // (serialized behind in-flight flushes) before destroying the engine.
+    // This is the final position write, ordered after every earlier
+    // publish — the sync signal it triggers is the mirrored close-time
+    // drain (see SyncService.enqueueProgress/signalFlush).
     void (async () => {
       try {
         if (finalEngine) await persistPosition(finalEngine)
@@ -748,10 +748,9 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   // position is durably in the worker (acked), bounded by a 5 s timeout.
   window.liseur.reader.setActive(true)
   const offFlush = window.liseur.reader.onFlushProgress(async () => {
-    clearTimeout(saveTimer)
     // The close handshake awaits BOTH the final position and any pending
     // note edit — neither is lost on window close.
-    await Promise.all([saveProgress(), flushNote()])
+    await Promise.all([engine ? persistPosition(engine) : Promise.resolve(), flushNote()])
   })
 
   onMount(async () => {
@@ -776,9 +775,12 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
         result.toc,
         prefs(),
       )
-      created.onPosition((info) => {
+      created.onPosition((info, origin) => {
         setPosition(info)
-        scheduleSave()
+        // Only real navigation is worth persisting: the initial restore and
+        // any relayout (resize, font settling, typography change) preserve
+        // an existing position rather than creating one.
+        if (origin === 'user') publishPosition()
       })
       // Annotations: the engine re-anchors them into every loaded chapter.
       setAnnotations(result.annotations)
@@ -836,7 +838,6 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
 
   onCleanup(() => {
     disposed = true
-    clearTimeout(saveTimer)
     clearTimeout(hideTimer)
     clearTimeout(searchDebounce)
     cancelActiveSearch()
