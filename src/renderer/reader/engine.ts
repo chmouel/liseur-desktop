@@ -49,6 +49,34 @@ export interface SelectionAnchor {
   y: number
 }
 
+/**
+ * Why a position update was emitted.
+ *
+ * `user` — the reader deliberately moved (next/previous page, TOC, scrubber,
+ * search result, bookmark/highlight jump, or an in-book link). This is the
+ * only origin that should ever be persisted or synced: it is the thing the
+ * Android `ReadingPositionPublisher` calls a page turn.
+ *
+ * `restore` — the initial `open()` landing on a saved (or default) locator.
+ * Nothing changed; publishing here would re-save the position that was just
+ * loaded and could race a genuinely newer save still in flight.
+ *
+ * `relayout` — a resize, a font-settling re-measure, or a typography/margin
+ * preference change re-laying out the current chapter. The reading position
+ * (progression) is preserved across these, not created by them.
+ */
+export type PositionOrigin = 'user' | 'restore' | 'relayout'
+
+/**
+ * Whether a position update from this origin represents real reading
+ * activity worth persisting and syncing. Only deliberate navigation does —
+ * the initial restore and any relayout preserve an existing position rather
+ * than creating a new one, so publishing them would be a false revision.
+ */
+export function isPublishableOrigin(origin: PositionOrigin): boolean {
+  return origin === 'user'
+}
+
 export interface ReaderEngine {
   open(start: Locator | null): Promise<void>
   nextPage(): Promise<void>
@@ -62,7 +90,9 @@ export interface ReaderEngine {
   preferences(): ReaderPreferences
   locator(): Locator
   pageInfo(): PageInfo
-  onPosition(listener: (info: PageInfo) => void): void
+  /** Fired on every position change; `origin` tells the caller whether this
+   *  is real reading activity worth persisting (see `PositionOrigin`). */
+  onPosition(listener: (info: PageInfo, origin: PositionOrigin) => void): void
   /** The book's annotations; re-anchored into the chapter on every load. */
   setAnnotations(annotations: Annotation[]): void
   /** Current iframe selection as a storable anchor, or null. */
@@ -106,7 +136,7 @@ export class ColumnEngine implements ReaderEngine {
   private page = 0
   private pageCount = 1
   private readonly pageCounts: (number | null)[]
-  private readonly listeners = new Set<(info: PageInfo) => void>()
+  private readonly listeners = new Set<(info: PageInfo, origin: PositionOrigin) => void>()
   private endOfBook = false
   private loadChain: Promise<void> = Promise.resolve()
   private resizeObserver: ResizeObserver | undefined
@@ -162,7 +192,11 @@ export class ColumnEngine implements ReaderEngine {
     const index = start ? this.spine.findIndex((s) => s.href === start.href) : -1
     const target = index >= 0 ? index : this.spine.findIndex((s) => s.linear)
     const progression = index >= 0 ? (start?.locations?.progression ?? 0) : 0
-    await this.loadItem(Math.max(0, target), (count) => pageForProgression(progression, count))
+    await this.loadItem(
+      Math.max(0, target),
+      (count) => pageForProgression(progression, count),
+      'restore',
+    )
   }
 
   async nextPage(): Promise<void> {
@@ -174,14 +208,14 @@ export class ColumnEngine implements ReaderEngine {
         const next = this.nextLinearIndex(1)
         if (next === -1) {
           this.endOfBook = true
-          this.emit()
+          this.emit('user')
           return
         }
-        await this.loadItemLocked(next, 0)
+        await this.loadItemLocked(next, 0, 'user')
         return
       }
       this.apply()
-      this.emit()
+      this.emit('user')
     })
   }
 
@@ -193,11 +227,11 @@ export class ColumnEngine implements ReaderEngine {
       } else {
         const prev = this.nextLinearIndex(-1)
         if (prev === -1) return
-        await this.loadItemLocked(prev, (count) => count - 1)
+        await this.loadItemLocked(prev, (count) => count - 1, 'user')
         return
       }
       this.apply()
-      this.emit()
+      this.emit('user')
     })
   }
 
@@ -210,10 +244,14 @@ export class ColumnEngine implements ReaderEngine {
       if (index === this.spineIndex && this.iframe.contentDocument) {
         if (fragment) this.page = this.pageForFragment(fragment)
         this.apply()
-        this.emit()
+        this.emit('user')
         return
       }
-      await this.loadItemLocked(index, () => (fragment ? this.pageForFragment(fragment) : 0))
+      await this.loadItemLocked(
+        index,
+        () => (fragment ? this.pageForFragment(fragment) : 0),
+        'user',
+      )
     })
   }
 
@@ -224,11 +262,13 @@ export class ColumnEngine implements ReaderEngine {
       if (target.spineIndex === this.spineIndex) {
         this.page = pageForProgression(target.itemProgression, this.pageCount)
         this.apply()
-        this.emit()
+        this.emit('user')
         return
       }
-      await this.loadItemLocked(target.spineIndex, (count) =>
-        pageForProgression(target.itemProgression, count),
+      await this.loadItemLocked(
+        target.spineIndex,
+        (count) => pageForProgression(target.itemProgression, count),
+        'user',
       )
     })
   }
@@ -275,7 +315,7 @@ export class ColumnEngine implements ReaderEngine {
     }
   }
 
-  onPosition(listener: (info: PageInfo) => void): void {
+  onPosition(listener: (info: PageInfo, origin: PositionOrigin) => void): void {
     this.listeners.add(listener)
   }
 
@@ -360,7 +400,7 @@ export class ColumnEngine implements ReaderEngine {
     await this.enqueue(async () => {
       this.endOfBook = false
       if (index !== this.spineIndex) {
-        await this.loadItemLocked(index, 0)
+        await this.loadItemLocked(index, 0, 'user')
       }
       let page = pageForProgression(locator.locations?.progression ?? 0, this.pageCount)
       const doc = this.doc()
@@ -378,7 +418,7 @@ export class ColumnEngine implements ReaderEngine {
       this.page = page
       this.apply()
       this.renderAnnotations()
-      this.emit()
+      this.emit('user')
       // The flash is ephemeral: clear after a moment without touching layout.
       setTimeout(() => {
         if (this.flashRange && !this.destroyed) {
@@ -463,13 +503,15 @@ export class ColumnEngine implements ReaderEngine {
   private async loadItem(
     index: number,
     page: number | ((pageCount: number) => number),
+    origin: PositionOrigin,
   ): Promise<void> {
-    await this.enqueue(() => this.loadItemLocked(index, page))
+    await this.enqueue(() => this.loadItemLocked(index, page, origin))
   }
 
   private async loadItemLocked(
     index: number,
     page: number | ((pageCount: number) => number),
+    origin: PositionOrigin,
   ): Promise<void> {
     const item = this.spine[index]
     if (!item) return
@@ -487,10 +529,12 @@ export class ColumnEngine implements ReaderEngine {
     this.page = clampPage(typeof page === 'function' ? page(this.pageCount) : page, this.pageCount)
     this.apply()
     this.renderAnnotations()
-    this.emit()
+    this.emit(origin)
 
     // Late web-font settling can change scrollWidth after the first layout.
-    // Re-measure once fonts are ready, preserving the reading position.
+    // Re-measure once fonts are ready, preserving the reading position. This
+    // is a layout correction, not reading activity: it always reports
+    // 'relayout', regardless of the origin that loaded the chapter.
     const doc = this.doc()
     const settledIndex = index
     void doc?.fonts?.ready.then(() => {
@@ -620,7 +664,7 @@ export class ColumnEngine implements ReaderEngine {
       this.pageCount = this.measure()
       this.page = pageForProgression(progression, this.pageCount)
       this.apply()
-      this.emit()
+      this.emit('relayout')
     })
   }
 
@@ -679,9 +723,9 @@ export class ColumnEngine implements ReaderEngine {
     return flat.find((e) => splitFragment(e.href)[0] === href)?.label
   }
 
-  private emit(): void {
+  private emit(origin: PositionOrigin): void {
     const info = this.pageInfo()
-    for (const listener of this.listeners) listener(info)
+    for (const listener of this.listeners) listener(info, origin)
   }
 }
 
