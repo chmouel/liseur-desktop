@@ -119,13 +119,13 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   in main's settings IPC).
   The reader's font size is set on `<html>` and forced onto the book's text
   with `font-size: inherit !important`. Without this the control does
-  nothing on most real books: publishers pin their text with *absolute*
+  nothing on most real books: publishers pin their text with _absolute_
   sizes (`font-size: small`, `11px`), which are resolved from the browser
   default and ignore the page entirely. Headings and small print are
   restated in `em` so the hierarchy scales with the reader's size.
 - Line length is capped at a readable measure (`readerMeasurePx`), so a
   maximised window gets margins rather than edge-to-edge lines. Breathing
-  room lives on the container *outside* the iframe: padding inside a multicol
+  room lives on the container _outside_ the iframe: padding inside a multicol
   box applies once around the whole flow, not per page.
 - The book's `<body>` box is normalised to the iframe's width (margin,
   padding, border and width forced), and `pageStep()` measures the resulting
