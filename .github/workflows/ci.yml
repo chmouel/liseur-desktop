@@ -5,15 +5,25 @@ on:
     branches: [main]
   pull_request:
 
+# Continuous integration reads the code and reports on it. It has no business
+# writing anything, so it is given no permission to.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Every action is pinned to a commit, not a tag. A tag can be moved to
+      # point at different code by whoever controls the repository — or by
+      # whoever steals the account — and these actions run with access to this
+      # workflow's token and secrets. Dependabot proposes the updates, and the
+      # trailing comment says which version each commit corresponds to.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -23,6 +33,9 @@ jobs:
       # electron-builder/electron postinstall downloads a binary; pnpm blocks
       # build scripts by default — allow only what we explicitly need.
       - run: pnpm rebuild electron esbuild
+
+      - name: Known vulnerabilities
+        run: pnpm audit --audit-level high
 
       - run: pnpm typecheck
       - run: pnpm lint
@@ -37,3 +50,38 @@ jobs:
 
       - name: E2E tests
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" pnpm test:e2e
+
+  # A change to the lockfile is the one way a supply-chain attack reaches this
+  # project, so it gets read out loud rather than scrolled past.
+  lockfile:
+    name: Lockfile change
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare against the base branch
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet "$BASE" HEAD -- pnpm-lock.yaml; then
+            echo "The lockfile is untouched." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # A lockfile that moves on its own, with no change to the
+          # dependencies that are actually asked for, is the shape of both an
+          # accident and an attack. Dependabot is exempt: moving the lockfile
+          # while pinning a transitive dependency is precisely its job.
+          if git diff --quiet "$BASE" HEAD -- package.json && [ "$AUTHOR" != "dependabot[bot]" ]; then
+            echo "::error::pnpm-lock.yaml changed but package.json did not. If this is deliberate, say so in the pull request; if it is not, check where it came from."
+            exit 1
+          fi
+
+          git show "$BASE:pnpm-lock.yaml" > /tmp/base-lock.yaml 2>/dev/null || : > /tmp/base-lock.yaml
+          node scripts/check-lockfile-change.mjs /tmp/base-lock.yaml pnpm-lock.yaml | tee -a "$GITHUB_STEP_SUMMARY"
