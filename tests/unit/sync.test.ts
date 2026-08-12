@@ -10,6 +10,7 @@ import { CalibreCatalog, parseOpdsFeed } from '../../src/worker/sync/calibre'
 import { KomgaCatalog } from '../../src/worker/sync/komga'
 import { SyncRepository } from '../../src/worker/sync/sync-repository'
 import { BookRepository } from '../../src/worker/library/book-repository'
+import { ReadingSessionRepository } from '../../src/worker/library/reading-sessions'
 import { SyncService } from '../../src/worker/sync/sync-service'
 import type { FetchLike } from '../../src/worker/sync/http'
 import { jsonResponse, mockKomga } from './sync-mocks'
@@ -927,6 +928,72 @@ describe('SyncService against mock Komga', () => {
     expect(requests[1]?.body).toEqual({ name: 'liseur-desktop', scope: 'sync' })
     // The device secret, not the hour-long login credential.
     expect(Object.values(secrets)[0]?.['authorization']).toBe('Bearer device-secret')
+  })
+
+  it('tells a liseur-sync server how long a book was read', async () => {
+    // Positions say where you got to; only these say you were there for a
+    // while. Without them the reading statistics on the phone count nothing
+    // done on this machine.
+    const posted: { sessions: Record<string, unknown>[] }[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/v1/login') return jsonResponse({ auth_token: 'x', expires_in: 3600 })
+      if (path === '/v1/tokens') {
+        return jsonResponse({ token_id: 't', device_id: 'd', secret: 'device-secret' }, 201)
+      }
+      if (path === '/v1/changes') return jsonResponse({ ops: [], high_water: '0' })
+      if (path === '/v1/sessions') {
+        posted.push(JSON.parse(String(init?.body)) as { sessions: Record<string, unknown>[] })
+        return jsonResponse({ accepted: 1 }, 200)
+      }
+      if (path.endsWith('/positions')) return jsonResponse({ ops: [] })
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Sync',
+      url: 'http://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+
+    const books = new BookRepository(db)
+    const book = {
+      id: 'local-1',
+      title: 'Guidebook',
+      authors: [],
+      finished: false,
+      archived: false,
+      downloaded: true,
+      addedAt: Date.now(),
+    }
+    books.insertBooks([book])
+    new SyncRepository(db).link(server.id, book.id, 'work-1')
+
+    // Two page turns a minute apart, long enough ago to count as a finished
+    // sitting rather than one still under way.
+    const sessions = new ReadingSessionRepository(db)
+    service.trackSessions(sessions)
+    const started = Date.now() - 30 * 60_000
+    sessions.record(book.id, started, 0.1)
+    sessions.record(book.id, started + 60_000, 0.25)
+
+    await service.syncNow(server.id)
+
+    expect(posted).toHaveLength(1)
+    const sent = posted[0]?.sessions?.[0] as Record<string, string | number>
+    expect(sent?.['work_id']).toBe('work-1')
+    expect(sent?.['start_progression']).toBeCloseTo(0.1)
+    expect(sent?.['end_progression']).toBeCloseTo(0.25)
+    expect(Date.parse(String(sent?.['ended_at'])) - Date.parse(String(sent?.['started_at']))).toBe(
+      60_000,
+    )
+
+    // Sent once: the next sync has nothing left to say.
+    await service.syncNow(server.id)
+    expect(posted).toHaveLength(1)
   })
 
   it('says why a liseur-sync sign-in failed instead of just "login failed"', async () => {

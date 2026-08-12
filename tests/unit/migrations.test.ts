@@ -25,6 +25,7 @@ describe('migrate', () => {
       'books',
       'folders',
       'reading_progress',
+      'reading_sessions',
       'remote_servers',
       'server_book_links',
       'sync_acks',

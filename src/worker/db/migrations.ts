@@ -238,4 +238,26 @@ export const MIGRATIONS: readonly Migration[] = [
       ).run(now, now, now)
     },
   },
+  {
+    version: 8,
+    name: 'reading sessions',
+    up: (db) => {
+      // How long a book was actually read, in stretches. The sync server
+      // aggregates these into the reading statistics the phone shows, and
+      // until now nothing this app did ever counted towards them.
+      db.exec(`
+        CREATE TABLE reading_sessions (
+          id TEXT PRIMARY KEY,
+          book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+          started_at INTEGER NOT NULL,
+          ended_at INTEGER NOT NULL,
+          start_progression REAL,
+          end_progression REAL,
+          uploaded_at INTEGER
+        );
+        CREATE INDEX idx_sessions_book ON reading_sessions(book_id, ended_at DESC);
+        CREATE INDEX idx_sessions_pending ON reading_sessions(uploaded_at) WHERE uploaded_at IS NULL;
+      `)
+    },
+  },
 ]

@@ -8,6 +8,7 @@ import { IngestionService } from './library/ingestion'
 import { BookOpener } from './library/open-book'
 import { AnnotationRepository } from './library/annotation-repository'
 import { BookSearchService } from './library/book-search'
+import { ReadingSessionRepository } from './library/reading-sessions'
 import { SyncService } from './sync/sync-service'
 import { seedLibraryIfEmpty } from './library/seed'
 
@@ -33,6 +34,7 @@ function initLibrary(): {
   library: LibraryService
   ingestion: IngestionService
   opener: BookOpener
+  sessions: ReadingSessionRepository
   annotations: AnnotationRepository
   search: BookSearchService
   sync: SyncService
@@ -64,18 +66,21 @@ function initLibrary(): {
   })
 
   const opener = new BookOpener(db, dataDir, (bookId) => sync.downloadBook(bookId))
+  const sessions = new ReadingSessionRepository(db)
+  sync.trackSessions(sessions)
 
   return {
     library: new LibraryService(db),
     ingestion,
     opener,
+    sessions,
     annotations: new AnnotationRepository(db),
     search: new BookSearchService(db),
     sync,
   }
 }
 
-const { library, ingestion, opener, annotations, search, sync } = initLibrary()
+const { library, ingestion, opener, annotations, search, sync, sessions } = initLibrary()
 
 /** process.parentPort kept in a variable for the sync secret forwarding. */
 const parentPortRef = (
@@ -159,6 +164,9 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
         .open(request.bookId)
         .then((result) => {
           send(port, { kind: 'reader.open.result', id: request.id, result })
+          // A sitting starts when the book opens, not at the first page turn:
+          // reading the page you land on is reading.
+          sessions.record(result.book.id, Date.now(), result.book.progress?.progression)
           // lastOpenedAt changed: keep library views incrementally fresh.
           broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book: result.book } })
         })
@@ -171,6 +179,7 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
         request.progression,
         Date.now(),
       )
+      sessions.record(request.bookId, Date.now(), request.progression)
       send(port, { kind: 'reader.progress.saved', id: request.id })
       broadcastEvent({ kind: 'event', event: { type: 'bookUpdated', book } })
       // Remote books: coalesce into the persisted push queue.

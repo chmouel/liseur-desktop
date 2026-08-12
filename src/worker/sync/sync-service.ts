@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { Book, Locator } from '../../shared/domain/types'
 import type { ServerInfo, SyncConflictInfo, SyncState } from '../../shared/ipc/protocol'
 import { BookRepository } from '../library/book-repository'
+import type { ReadingSessionRepository } from '../library/reading-sessions'
 import { storeCoverBytes } from '../library/cover-cache'
 import { reconcileProgress, withSaneTimestamp, type ReconcileAction } from './reconcile'
 import { KomgaCatalog } from './komga'
@@ -68,6 +69,8 @@ export class SyncService {
   private readonly credentials = new Map<string, ServerCredentials>()
   private readonly catalogs = new Map<string, RemoteCatalog>()
   private syncing = false
+  /** Set once the worker hands over the reading-session recorder. */
+  private sessions: ReadingSessionRepository | undefined
   private flushTimer: ReturnType<typeof setTimeout> | undefined
   /** Servers whose catalog has already been pulled in this process. */
   private readonly caughtUp = new Set<string>()
@@ -334,6 +337,7 @@ export class SyncService {
       // changes feed (cursor-persisted, 410 → heads resync).
       if (catalog instanceof LiseurSyncCatalog) await this.syncLiseurChanges(catalog)
       else await this.reconcileServer(catalog, withProgress)
+      await this.uploadSessions(catalog)
       await this.flushQueue()
       this.repository.markSynced(serverId, Date.now())
     } catch (err) {
@@ -363,6 +367,43 @@ export class SyncService {
   }
 
   /** Pull remote progress for tracked books and reconcile against local. */
+  /**
+   * Reading stretches are recorded whether or not a server ever wants them;
+   * a service that has been given the recorder can hand them over.
+   */
+  trackSessions(sessions: ReadingSessionRepository): void {
+    this.sessions = sessions
+  }
+
+  /**
+   * Hands finished reading stretches to a server that keeps statistics.
+   *
+   * Only stretches for books this server knows can be sent: the server
+   * refuses a session for a work it has never heard of, and rightly so.
+   */
+  private async uploadSessions(catalog: RemoteCatalog): Promise<void> {
+    if (!this.sessions || !catalog.pushSessions) return
+    const links = new Map(
+      this.trackedBooks(catalog.server.id).map((row) => [row.bookId, row.remoteId]),
+    )
+    if (links.size === 0) return
+    const pending = this.sessions.pendingUpload([...links.keys()])
+    if (pending.length === 0) return
+    const payload = pending.flatMap((session) => {
+      const workId = links.get(session.bookId)
+      return workId ? [{ ...session, workId }] : []
+    })
+    try {
+      if (await catalog.pushSessions(payload)) {
+        this.sessions.markUploaded(pending.map((session) => session.id))
+      }
+    } catch (err) {
+      // A refused batch is retried on the next sync; reading time is not
+      // worth failing a sync over.
+      this.log(`sessions: ${(err as Error).message}`)
+    }
+  }
+
   private async reconcileServer(catalog: RemoteCatalog, withProgress: Set<string>): Promise<void> {
     const rows = this.trackedBooks(catalog.server.id)
     const queued = new Map(this.repository.queue().map((q) => [q.bookId, q.updatedAt]))

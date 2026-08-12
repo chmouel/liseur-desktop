@@ -6,6 +6,7 @@ import type {
   PullResult,
   RemoteBook,
   RemoteCatalog,
+  RemoteReadingSession,
   RemoteServer,
   TestResult,
 } from './types'
@@ -153,6 +154,33 @@ export class LiseurSyncCatalog implements RemoteCatalog {
     const data = await res.value.json<{ results?: { op_id: string; status: string }[] }>()
     const status = data.results?.[0]?.status
     return status === 'applied' || status === 'duplicate' ? 'ok' : 'rejected'
+  }
+
+  /**
+   * Uploads finished reading stretches, which is what the server counts
+   * into the reading statistics. Positions say where you are; these say
+   * that you were there for a while.
+   *
+   * The batch either lands or is retried whole on the next sync: the server
+   * keys sessions by their id, so resending one already stored changes
+   * nothing.
+   */
+  async pushSessions(sessions: RemoteReadingSession[]): Promise<boolean> {
+    if (sessions.length === 0) return true
+    const res = await this.http.request('POST', '/v1/sessions', {
+      body: JSON.stringify({
+        sessions: sessions.map((session) => ({
+          session_id: session.id,
+          work_id: session.workId,
+          started_at: new Date(session.startedAt).toISOString(),
+          ended_at: new Date(session.endedAt).toISOString(),
+          start_progression: session.startProgression ?? 0,
+          end_progression: session.endProgression ?? session.startProgression ?? 0,
+        })),
+      }),
+      headers: { 'content-type': 'application/json' },
+    })
+    return res.ok
   }
 
   /**

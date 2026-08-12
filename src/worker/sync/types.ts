@@ -83,4 +83,20 @@ export interface RemoteCatalog {
   pushProgress(remoteId: string, progress: ProgressRecord): Promise<'ok' | 'stale' | 'rejected'>
   /** Best-effort mark-as-read when a book finishes. */
   markCompleted?(remoteId: string): Promise<void>
+
+  /**
+   * Uploads finished reading stretches for the servers that keep reading
+   * statistics. Catalogs that only track a position leave this unset.
+   */
+  pushSessions?(sessions: RemoteReadingSession[]): Promise<boolean>
+}
+
+/** A finished reading stretch, addressed to a server's own book id. */
+export interface RemoteReadingSession {
+  id: string
+  workId: string
+  startedAt: number
+  endedAt: number
+  startProgression?: number | undefined
+  endProgression?: number | undefined
 }
