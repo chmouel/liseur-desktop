@@ -24,6 +24,7 @@ interface PersistedState {
   window?: Partial<WindowState>
   settings?: {
     theme?: 'system' | 'light' | 'dark'
+    resumeLastBook?: boolean
     // Structural duplication drifted once already: reuse the shared type
     // so a new preference cannot be silently dropped on the way to disk.
     reader?: ReaderPreferences | undefined

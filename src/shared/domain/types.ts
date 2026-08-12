@@ -97,6 +97,8 @@ export interface ReaderPreferences {
 
 export interface Settings {
   theme: AppTheme
+  /** Skip the library and jump straight into the last opened book on launch. */
+  resumeLastBook?: boolean
   /** Reader preferences persist across sessions and books (M5). */
   reader?: ReaderPreferences | undefined
 }

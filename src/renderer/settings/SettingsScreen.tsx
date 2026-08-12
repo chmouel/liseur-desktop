@@ -19,6 +19,7 @@ const SERVER_TYPES: readonly {
 ]
 
 export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
+  const [resumeLastBook, setResumeLastBook] = createSignal(false)
   const [state, setState] = createSignal<SyncState | null>(null)
   const [addOpen, setAddOpen] = createSignal(false)
   const [busy, setBusy] = createSignal<string | null>(null)
@@ -47,7 +48,13 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
     void refresh()
     const off = window.liseur.sync.onStateChanged((s) => setState(s))
     onCleanup(off)
+    void window.liseur.settings.get().then((s) => setResumeLastBook(s.resumeLastBook ?? false))
   })
+
+  function updateResumeLastBook(checked: boolean): void {
+    setResumeLastBook(checked)
+    void window.liseur.settings.set({ resumeLastBook: checked })
+  }
 
   async function shareStats(e: Event, serverId: string): Promise<void> {
     e.preventDefault()
@@ -159,6 +166,18 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
             ×
           </button>
         </header>
+
+        <section class="settings-section">
+          <h2>General</h2>
+          <label class="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={resumeLastBook()}
+              onChange={(e) => updateResumeLastBook(e.currentTarget.checked)}
+            />
+            Resume last opened book on launch
+          </label>
+        </section>
 
         <section class="settings-section">
           <h2>Remote servers</h2>

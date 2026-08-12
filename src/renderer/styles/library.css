@@ -451,6 +451,14 @@
   padding: 6px 10px;
 }
 
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .form-error {
   color: var(--danger);
   font-size: 13px;

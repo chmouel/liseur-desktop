@@ -58,7 +58,10 @@ export function setupIpc(): void {
 
   ipcMain.handle(IPC.settingsGet, (): Settings => {
     const persisted = readPersisted()
-    const settings: Settings = { theme: persisted.settings?.theme ?? 'system' }
+    const settings: Settings = {
+      theme: persisted.settings?.theme ?? 'system',
+      resumeLastBook: persisted.settings?.resumeLastBook ?? false,
+    }
     if (persisted.settings?.reader) settings.reader = persisted.settings.reader
     return settings
   })
@@ -68,6 +71,7 @@ export function setupIpc(): void {
     // Merge: a patch only replaces the keys it carries.
     const settings: Settings = {
       theme: patch.theme ?? current.settings?.theme ?? 'system',
+      resumeLastBook: patch.resumeLastBook ?? current.settings?.resumeLastBook ?? true,
       ...((patch.reader ?? current.settings?.reader)
         ? { reader: patch.reader ?? current.settings?.reader }
         : {}),

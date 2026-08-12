@@ -26,6 +26,19 @@ function watchForNewServerBooks(): void {
 }
 
 /**
+ * Jump straight into the last opened book on launch, when the user has
+ * opted in. Mirrors the localPath guard on the manual "Continue reading"
+ * banner click (LibraryScreen) — books without a local copy can't be
+ * opened directly.
+ */
+async function maybeResumeLastBook(setOpenBookId: (id: string) => void): Promise<void> {
+  const settings = await window.liseur.settings.get()
+  if (!settings.resumeLastBook) return
+  const book = await window.liseur.library.continueReading()
+  if (book?.localPath) setOpenBookId(book.id)
+}
+
+/**
  * Application shell. Renders immediately — the library streams in
  * asynchronously from the worker, so first paint is never blocked on data.
  * View switching is a plain signal: library or reader (a book id).
@@ -40,6 +53,7 @@ export function App(): JSX.Element {
     initLibrary()
     observeLongTasks()
     watchForNewServerBooks()
+    void maybeResumeLastBook(setOpenBookId)
     done()
   })
 
