@@ -17,6 +17,7 @@ import {
 } from '../../src/worker/library/reading-stats'
 import { SyncService } from '../../src/worker/sync/sync-service'
 import type { FetchLike } from '../../src/worker/sync/http'
+import type { Book } from '../../src/shared/domain/types'
 import { jsonResponse, mockKomga } from './sync-mocks'
 
 // --- reconcile matrix --------------------------------------------------------
@@ -585,6 +586,105 @@ describe('SyncService against mock Komga', () => {
     const remaining = repo.queue()
     expect(remaining).toHaveLength(1)
     expect(remaining[0]?.progression).toBe(0.7)
+  })
+
+  it('a committed page pushes to the server without a manual flush or a timer', async () => {
+    // Item 4 of the sync-every-page plan: enqueueProgress signals an
+    // immediate foreground drain. No `flushQueue()` call, no fake-timer
+    // advance — the push must land on its own.
+    const komga = mockKomga()
+    const { service } = makeService(komga.fetch)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    service.setCredentials(server.id, { headers: { 'x-api-key': 'api-key-1' } })
+    await service.syncNow(server.id)
+    const repo = new SyncRepository(db)
+    const shell = repo.findByRemoteId(server.id, 'book-1')!
+    const book = new BookRepository(db).getById(shell.id)!
+
+    service.enqueueProgress(book, { href: 'ch1.xhtml' }, 0.5)
+    await vi.waitFor(() => expect(komga.progressPushes).toHaveLength(1))
+    expect(komga.progressPushes[0]?.locator.href).toBe('ch1.xhtml')
+  })
+
+  it('pages arriving during an in-flight push collapse into one latest follow-up drain', async () => {
+    // Item 4: "keep only one network drain in flight... run one follow-up
+    // drain using the latest queued versions" — many signals mid-flight
+    // must not turn into many follow-up drains.
+    const repo = new SyncRepository(db)
+    const ctx: { service?: SyncService; book?: Book } = {}
+    let extraSignalsSent = false
+    const komga = mockKomga({
+      onPush: () => {
+        if (extraSignalsSent) return
+        extraSignalsSent = true
+        // Three more "page turns" land while this push is still in flight.
+        ctx.service!.enqueueProgress(ctx.book!, { href: 'p2' }, 0.6)
+        ctx.service!.enqueueProgress(ctx.book!, { href: 'p3' }, 0.7)
+        ctx.service!.enqueueProgress(ctx.book!, { href: 'p4' }, 0.8)
+      },
+    })
+    const { service } = makeService(komga.fetch)
+    ctx.service = service
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    service.setCredentials(server.id, { headers: { 'x-api-key': 'api-key-1' } })
+    await service.syncNow(server.id)
+    const shell = repo.findByRemoteId(server.id, 'book-1')!
+    const bookRef = new BookRepository(db).getById(shell.id)!
+    ctx.book = bookRef
+
+    service.enqueueProgress(bookRef, { href: 'p1' }, 0.5)
+    await vi.waitFor(() => expect(komga.progressPushes.length).toBeGreaterThanOrEqual(2))
+    // Exactly one follow-up: three collapsed signals produce one more push,
+    // carrying the LATEST locator, not three separate pushes.
+    expect(komga.progressPushes).toHaveLength(2)
+    expect(komga.progressPushes[1]?.locator.href).toBe('p4')
+    expect(repo.queue()).toHaveLength(0)
+  })
+
+  it("a push failure for one book does not strand another book's push in the same drain", async () => {
+    const komga = mockKomga()
+    const fetchImpl: FetchLike = async (url, init) => {
+      if (url.includes('/book-1/progression') && init?.method === 'PUT') {
+        throw new Error('network blip')
+      }
+      return komga.fetch(url, init)
+    }
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    service.setCredentials(server.id, { headers: { 'x-api-key': 'api-key-1' } })
+    await service.syncNow(server.id)
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const shellA = repo.findByRemoteId(server.id, 'book-1')!
+    const shellB = repo.findByRemoteId(server.id, 'book-2')!
+    const bookA = books.getById(shellA.id)!
+    const bookB = books.getById(shellB.id)!
+
+    service.enqueueProgress(bookA, { href: 'a' }, 0.3)
+    service.enqueueProgress(bookB, { href: 'b' }, 0.4)
+    await service.flushQueue()
+
+    // Book B's push went through even though book A's threw.
+    expect(komga.progressPushes).toHaveLength(1)
+    expect(komga.progressPushes[0]?.locator.href).toBe('b')
+    // Book A's row survives (un-acked) for the next drain to retry.
+    const remaining = repo.queue()
+    expect(remaining.map((r) => r.bookId)).toEqual([bookA.id])
   })
 
   it('conflicts suspend the queue row until resolved', async () => {

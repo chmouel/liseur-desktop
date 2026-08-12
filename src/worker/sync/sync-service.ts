@@ -30,9 +30,11 @@ import {
  * Sync orchestration (M7). Catalog sync streams remote books into local
  * shell rows (bookAdded per page); downloads fetch EPUB bytes into the
  * library; progress flows through a persisted, coalesced queue (one row per
- * book, flushed on a debounce, on demand, and at startup — the queue
- * survives restarts). Conflicts are preserved for the catch-up UI, never
- * auto-resolved.
+ * book) flushed immediately after each commit — never on a timer — plus on
+ * demand and at startup; the queue survives restarts. Only one network
+ * drain runs at a time; signals that arrive mid-drain collapse into a
+ * single follow-up pass over the latest queued versions. Conflicts are
+ * preserved for the catch-up UI, never auto-resolved.
  *
  * All networking lives here (worker process only). Credentials arrive from
  * main as in-memory auth headers; nothing secret touches SQLite.
@@ -97,7 +99,6 @@ export class SyncService {
   private syncing = false
   /** Set once the worker hands over the reading-session recorder. */
   private sessions: ReadingSessionRepository | undefined
-  private flushTimer: ReturnType<typeof setTimeout> | undefined
   /** Servers whose catalog has already been pulled in this process. */
   private readonly caughtUp = new Set<string>()
   /** Cover fetches in flight, so scrolling cannot stampede one book. */
@@ -956,25 +957,76 @@ export class SyncService {
 
   // --- progress queue -------------------------------------------------------------
 
-  /** Called on every local progress save: coalesce into the persisted queue. */
+  /** Called on every local progress save: coalesce into the persisted queue
+   *  and signal an immediate foreground drain (post-commit — see
+   *  reading-position-publisher.ts, which calls this only after the SQLite
+   *  write lands). */
   enqueueProgress(book: Book, locator: Locator, progression: number | undefined): void {
     const hasCatalogTarget = book.serverId && book.remoteId
     const hasSyncTarget = this.repository
       .listServers()
       .some((s) => s.type === 'liseur-sync' && this.credentials.has(s.id))
     if (!hasCatalogTarget && !hasSyncTarget) return
-    this.repository.enqueue(book.id, locator, progression, Date.now())
-    this.scheduleFlush()
+    this.repository.enqueue(book.id, locator, progression, this.monotonicNow())
+    this.signalFlush()
     this.emitState()
   }
 
-  private scheduleFlush(): void {
-    clearTimeout(this.flushTimer)
-    this.flushTimer = setTimeout(() => void this.flushQueue(), 2000)
+  /** Last version handed out by `monotonicNow`. */
+  private lastVersion = 0
+
+  /**
+   * `Date.now()`, but guaranteed strictly increasing across calls in this
+   * process. Immediate publishing means several page turns can land within
+   * the same millisecond; the queue's per-target ack/dequeue logic compares
+   * this value to decide "already delivered this exact version" — two rows
+   * sharing a timestamp would make a genuinely newer position look already
+   * acknowledged. A wall-clock-derived but monotonic version keeps every
+   * enqueue distinguishable without depending on clock resolution.
+   */
+  private monotonicNow(): number {
+    const now = Date.now()
+    this.lastVersion = now > this.lastVersion ? now : this.lastVersion + 1
+    return this.lastVersion
   }
 
-  /** Flushes are serialized: timer, manual and credential-triggered calls
-   *  never overlap. */
+  /** Whether a signal-driven drain is currently running. */
+  private draining = false
+  /** Set when a signal arrives while a drain is already running; the
+   *  running drain runs once more before stopping, so it never misses the
+   *  work that arrived mid-flight (Android's LatestPositionSync equivalent:
+   *  many signals while busy collapse into exactly one following drain). */
+  private drainAgain = false
+
+  /**
+   * Signals that new durable work exists. Only one network drain is ever in
+   * flight: a signal while draining just remembers to run one more pass
+   * once the current one finishes, picking up the latest queued versions —
+   * it never resets a timer, and it never queues an unbounded backlog of
+   * drains.
+   */
+  private signalFlush(): void {
+    if (this.draining) {
+      this.drainAgain = true
+      return
+    }
+    this.draining = true
+    void this.drainLoop()
+  }
+
+  private async drainLoop(): Promise<void> {
+    try {
+      do {
+        this.drainAgain = false
+        await this.flushQueue()
+      } while (this.drainAgain)
+    } finally {
+      this.draining = false
+    }
+  }
+
+  /** Flushes are serialized: signal-driven, manual and credential-triggered
+   *  calls never overlap. */
   private flushChain: Promise<void> = Promise.resolve()
 
   async flushQueue(): Promise<void> {
