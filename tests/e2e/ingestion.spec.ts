@@ -1,9 +1,9 @@
-import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { test, expect, type ElectronApplication } from '@playwright/test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { buildEpub } from '../unit/epub-fixture'
+import { installBook, launchApp } from './helpers'
 
 /**
  * Folder ingestion end to end. Native open dialogs can't be automated, so
@@ -14,16 +14,8 @@ import { buildEpub } from '../unit/epub-fixture'
  * cover served over the liseur-cover scheme.
  */
 
-const env = (dataDir: string) => ({
-  ...process.env,
-  NODE_ENV: 'test',
-  LISEUR_DATA_DIR: dataDir,
-})
-
 async function launch(dataDir: string): Promise<ElectronApplication> {
-  const app = await electron.launch({ args: ['.'], env: env(dataDir) })
-  const page = await app.firstWindow()
-  await page.waitForSelector('.library-screen')
+  const { app } = await launchApp(dataDir)
   return app
 }
 
@@ -50,22 +42,14 @@ test('startup folder rescan ingests a new EPUB', async () => {
   const booksDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-books-'))
   let app: ElectronApplication | undefined
   try {
-    // Phase 1: create the app's database (migrations only).
-    app = await launch(dataDir)
-    await app.close()
-
-    // Register a folder and drop a real EPUB in it while the app is closed.
-    writeFileSync(
-      join(booksDir, 'e2e-tome.epub'),
+    // Phase 1: create the app's database, register a folder and drop a real
+    // EPUB in it while the app is closed.
+    await installBook(
+      dataDir,
+      booksDir,
+      'e2e-tome.epub',
       buildEpub({ title: 'The E2E Tome', creators: ['Play Wright'], identifier: 'e2e-tome-1' }),
     )
-    const db = new DatabaseSync(join(dataDir, 'liseur.db'))
-    db.prepare('INSERT INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
-      'e2e-folder',
-      booksDir,
-      Date.now(),
-    )
-    db.close()
 
     // Phase 2: the startup rescan must ingest the book.
     app = await launch(dataDir)

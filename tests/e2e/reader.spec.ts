@@ -1,15 +1,9 @@
-import {
-  test,
-  expect,
-  _electron as electron,
-  type ElectronApplication,
-  type Page,
-} from '@playwright/test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { buildReaderEpub } from '../unit/epub-fixture'
+import { installBooks, launchApp } from './helpers'
 
 /**
  * Reader proof of concept end to end: a real EPUB is ingested, opened from
@@ -19,17 +13,8 @@ import { buildReaderEpub } from '../unit/epub-fixture'
 let dataDir: string
 let booksDir: string
 
-async function launch(): Promise<{
-  app: ElectronApplication
-  page: Page
-}> {
-  const app = await electron.launch({
-    args: ['.'],
-    env: { ...process.env, NODE_ENV: 'test', LISEUR_DATA_DIR: dataDir },
-  })
-  const page = await app.firstWindow()
-  await page.waitForSelector('.library-screen')
-  return { app, page }
+async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
+  return launchApp(dataDir)
 }
 
 async function openBook(page: Page): Promise<void> {
@@ -46,20 +31,10 @@ test.beforeAll(async () => {
   booksDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-reader-books-'))
 
   // Phase 1: let the app create its database, then register the folder.
-  const { app } = await launch()
-  await app.close()
-  writeFileSync(join(booksDir, 'reader.epub'), buildReaderEpub({ chapters: 3 }))
-  writeFileSync(
-    join(booksDir, 'second.epub'),
-    buildReaderEpub({ chapters: 3, title: 'Second Tome' }),
-  )
-  const db = new DatabaseSync(join(dataDir, 'liseur.db'))
-  db.prepare('INSERT INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
-    'reader-folder',
-    booksDir,
-    Date.now(),
-  )
-  db.close()
+  await installBooks(dataDir, booksDir, {
+    'reader.epub': buildReaderEpub({ chapters: 3 }),
+    'second.epub': buildReaderEpub({ chapters: 3, title: 'Second Tome' }),
+  })
 })
 
 test.afterAll(async () => {

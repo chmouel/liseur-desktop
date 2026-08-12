@@ -54,6 +54,15 @@ export async function installBook(
   filename: string,
   epub: Buffer,
 ): Promise<void> {
+  await installBooks(dataDir, booksDir, { [filename]: epub })
+}
+
+/** As `installBook`, for a folder that starts with several books in it. */
+export async function installBooks(
+  dataDir: string,
+  booksDir: string,
+  epubs: Record<string, Buffer>,
+): Promise<void> {
   const { app } = await launchApp(dataDir)
   // The library screen paints before the worker has finished preparing the
   // database, so wait for the table we are about to write to. The worker may
@@ -82,7 +91,9 @@ export async function installBook(
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   await app.close()
-  writeFileSync(join(booksDir, filename), epub)
+  for (const [filename, epub] of Object.entries(epubs)) {
+    writeFileSync(join(booksDir, filename), epub)
+  }
   // The app has gone but its file handles may take a moment to follow.
   const writeDeadline = Date.now() + 10_000
   for (;;) {
