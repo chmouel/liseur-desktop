@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Locator } from '../../shared/domain/types'
-import { Http } from './http'
+import { Http, type HttpResponse, type HttpResult } from './http'
 import type {
   ProgressRecord,
   PullResult,
@@ -179,36 +179,65 @@ export class LiseurSyncCatalog implements RemoteCatalog {
   }
 }
 
-/** Setup flow: login → mint a scoped sync token (returned to the caller, which
- *  stores it via the OS-keychain-backed secret store in main). */
+/**
+ * Setup flow: sign in, then mint a scoped device token to keep (returned to
+ * the caller, which stores it via the OS-keychain-backed secret store in
+ * main). The password buys an hour-long credential that can do nothing but
+ * create device tokens, and is never stored.
+ *
+ * Returns the reason on failure. "Login failed" on its own tells a user
+ * nothing about whether they typed the wrong password, pointed at the wrong
+ * URL, or hit a server that is down.
+ */
 export async function liseurSyncLogin(
   serverUrl: string,
   username: string,
   password: string,
   fetchImpl?: ConstructorParameters<typeof Http>[2],
-): Promise<{ token: string } | null> {
+): Promise<{ ok: true; token: string } | { ok: false; detail: string }> {
   const http = new Http(serverUrl, {}, fetchImpl)
   const login = await http.request('POST', '/v1/login', {
     body: JSON.stringify({ username, password }),
     headers: { 'content-type': 'application/json' },
   })
-  if (!login.ok || !login.value) return null
+  if (!login.ok || !login.value) return { ok: false, detail: await describe('sign-in', login) }
   const session = await login.value.json<{ auth_token?: string }>()
-  if (!session.auth_token) return null
+  if (!session.auth_token) {
+    return { ok: false, detail: 'sign-in answered without a credential' }
+  }
 
   const mint = await new Http(
     serverUrl,
     { authorization: `Bearer ${session.auth_token}` },
     fetchImpl,
   ).request('POST', '/v1/tokens', {
-    body: JSON.stringify({ scope: 'sync', name: 'liseur-desktop' }),
+    body: JSON.stringify({ name: 'liseur-desktop', scope: 'sync' }),
     headers: { 'content-type': 'application/json' },
   })
-  if (!mint.ok || !mint.value) return null
-  const data = await mint.value.json<{
-    token?: string
-    tokens?: { token: string; scope: string }[]
-  }>()
-  const token = data.token ?? data.tokens?.find((t) => t.scope === 'sync')?.token
-  return token ? { token } : null
+  if (!mint.ok || !mint.value) return { ok: false, detail: await describe('device token', mint) }
+  // The server shows the device secret exactly once, as `secret`
+  // (internal/api/routes.go, HandleCreateToken). `token` is accepted too so
+  // an older server is not left stranded.
+  const data = await mint.value.json<{ secret?: string; token?: string }>()
+  const token = data.secret ?? data.token
+  return token ? { ok: true, token } : { ok: false, detail: 'device token came back empty' }
+}
+
+/** Turns a refused request into something worth showing a person. */
+async function describe(what: string, result: HttpResult<HttpResponse>): Promise<string> {
+  if (!result.value) return `${what} failed: ${result.error ?? `HTTP ${result.status}`}`
+  let body = ''
+  try {
+    body = (await result.value.text()).trim().slice(0, 200)
+  } catch {
+    // A server that will not even give us its complaint still has a status.
+  }
+  const parsed = ((): string => {
+    try {
+      return String((JSON.parse(body) as { error?: unknown }).error ?? '')
+    } catch {
+      return body
+    }
+  })()
+  return `${what} failed: HTTP ${result.status}${parsed ? ` — ${parsed}` : ''}`
 }

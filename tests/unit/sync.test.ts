@@ -652,6 +652,81 @@ describe('SyncService against mock Komga', () => {
     expect(shelved(a.server.id)).toBeGreaterThan(0)
     expect(shelved(b.server.id)).toBeGreaterThan(0)
   })
+
+  it('signs in to liseur-sync and keeps the device secret the server hands back', async () => {
+    // Mirrors the server: POST /v1/login returns `auth_token`, POST
+    // /v1/tokens answers 201 with the device secret under `secret`
+    // (internal/api/routes.go).
+    const requests: { path: string; auth: string | undefined; body: unknown }[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const u = new URL(url)
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      requests.push({
+        path: u.pathname,
+        auth: headers['authorization'],
+        body: JSON.parse(String(init?.body ?? 'null')),
+      })
+      if (u.pathname === '/sync/v1/login') {
+        return jsonResponse({ auth_token: 'login-secret', expires_in: 3600 })
+      }
+      if (u.pathname === '/sync/v1/tokens') {
+        if (headers['authorization'] !== 'Bearer login-secret') {
+          return jsonResponse({ error: 'invalid auth credential' }, 401)
+        }
+        return jsonResponse(
+          {
+            token_id: 't1',
+            device_id: 'd1',
+            name: 'liseur-desktop',
+            scope: 'sync',
+            secret: 'device-secret',
+          },
+          201,
+        )
+      }
+      if (u.pathname === '/sync/v1/changes') return jsonResponse({ ops: [], high_water: '0' })
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service, secrets } = makeService(fetchImpl)
+    const { test: result } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Liszue',
+      // A base path, as a reverse proxy hands out: every route hangs off it.
+      url: 'https://books.example.com/sync/',
+      username: 'reader',
+      secret: 'password',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(requests.map((r) => r.path)).toEqual([
+      '/sync/v1/login',
+      '/sync/v1/tokens',
+      '/sync/v1/changes',
+    ])
+    expect(requests[1]?.body).toEqual({ name: 'liseur-desktop', scope: 'sync' })
+    // The device secret, not the hour-long login credential.
+    expect(Object.values(secrets)[0]?.['authorization']).toBe('Bearer device-secret')
+  })
+
+  it('says why a liseur-sync sign-in failed instead of just "login failed"', async () => {
+    const fetchImpl: FetchLike = async (url) =>
+      new URL(url).pathname.endsWith('/v1/login')
+        ? jsonResponse({ error: 'invalid credentials' }, 401)
+        : jsonResponse({ error: 'not found' }, 404)
+
+    const { service } = makeService(fetchImpl)
+    const { test: result } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Liszue',
+      url: 'https://books.example.com/sync/',
+      username: 'reader',
+      secret: 'wrong',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.detail).toMatch(/401/)
+    expect(result.detail).toMatch(/invalid credentials/)
+  })
 })
 
 // Reference the mock helper module (keeps this file focused).

@@ -185,9 +185,9 @@ export class SyncService {
             input.secret,
             this.deps.fetchImpl,
           )
-          if (!login) {
+          if (!login.ok) {
             this.repository.removeServer(server.id)
-            return { server: this.serverInfo(server), test: { ok: false, detail: 'login failed' } }
+            return { server: this.serverInfo(server), test: { ok: false, detail: login.detail } }
           }
           headers = { authorization: `Bearer ${login.token}` }
           break
