@@ -1,5 +1,5 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -17,9 +17,24 @@ export function makeTempDirs(): { dataDir: string; booksDir: string } {
   }
 }
 
+/**
+ * Every test gets the same window, whatever the screen behind it. Layout
+ * assertions (columns, measure caps) depend on how much room the reader has,
+ * and a CI screen is smaller than a desk one.
+ */
+const WINDOW = { width: 1600, height: 1000 }
+
 export async function launchApp(
   dataDir: string,
 ): Promise<{ app: ElectronApplication; page: Page }> {
+  // Seed the size before the window exists: resizing a live window makes it
+  // move under Playwright's feet and clicks never find a stable target.
+  mkdirSync(dataDir, { recursive: true })
+  const stateFile = join(dataDir, 'window-state.json')
+  const state = existsSync(stateFile)
+    ? (JSON.parse(readFileSync(stateFile, 'utf8')) as Record<string, unknown>)
+    : {}
+  writeFileSync(stateFile, JSON.stringify({ ...state, window: { ...WINDOW, x: 0, y: 0 } }))
   const app = await electron.launch({
     args: ['.'],
     env: { ...process.env, NODE_ENV: 'test', LISEUR_DATA_DIR: dataDir },
@@ -40,9 +55,25 @@ export async function installBook(
   epub: Buffer,
 ): Promise<void> {
   const { app } = await launchApp(dataDir)
+  // The library screen paints before the worker has finished preparing the
+  // database, so wait for the table we are about to write to.
+  const dbPath = join(dataDir, 'liseur.db')
+  const deadline = Date.now() + 20_000
+  for (;;) {
+    if (existsSync(dbPath)) {
+      const probe = new DatabaseSync(dbPath, { readOnly: true })
+      const found = probe
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'folders'")
+        .get()
+      probe.close()
+      if (found) break
+    }
+    if (Date.now() > deadline) throw new Error('the app never created its database')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
   await app.close()
   writeFileSync(join(booksDir, filename), epub)
-  const db = new DatabaseSync(join(dataDir, 'liseur.db'))
+  const db = new DatabaseSync(dbPath)
   db.prepare('INSERT OR IGNORE INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
     `folder-${booksDir}`,
     booksDir,
