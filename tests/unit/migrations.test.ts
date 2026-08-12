@@ -122,6 +122,43 @@ describe('migrate', () => {
     }
   })
 
+  it('pulls positions dated in the future back to when the server was asked', () => {
+    // A device with a fast clock dated a position hours ahead. It outranked
+    // everything read since, so the book stuck to the Continue Reading
+    // banner and to the top of Recent until the clock caught up.
+    const db = openDatabase(':memory:')
+    migrate(
+      db,
+      MIGRATIONS.filter((m) => m.version < 7),
+    )
+    const now = Date.now()
+    const syncedAt = now - 60_000
+    const future = now + 3 * 3_600_000
+    db.prepare(
+      'INSERT INTO remote_servers (id, type, name, url, added_at, last_sync_at) VALUES (?,?,?,?,?,?)',
+    ).run('srv', 'komga', 'K', 'http://k', now, syncedAt)
+    db.prepare(
+      `INSERT INTO books (id, title, authors, downloaded, finished, archived, added_at,
+                          last_opened_at, server_id, remote_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run('b1', 'Guidebook', '[]', 0, 0, 0, now, future, 'srv', 'r1')
+    db.prepare(
+      'INSERT INTO reading_progress (book_id, locator, progression, updated_at) VALUES (?,?,?,?)',
+    ).run('b1', '{}', 0.27, future)
+
+    migrate(db, MIGRATIONS)
+
+    const book = db.prepare('SELECT last_opened_at FROM books WHERE id = ?').get('b1') as {
+      last_opened_at: number
+    }
+    const progress = db
+      .prepare('SELECT updated_at FROM reading_progress WHERE book_id = ?')
+      .get('b1') as { updated_at: number }
+    expect(book.last_opened_at).toBe(syncedAt)
+    expect(progress.updated_at).toBe(syncedAt)
+    db.close()
+  })
+
   it('waits for a locked database instead of failing the query', () => {
     // Without a busy timeout, a database locked for even a moment (a WAL
     // checkpoint, a second connection mid-write) makes queries throw, and a

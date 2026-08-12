@@ -6,7 +6,7 @@ import type { Book, Locator } from '../../shared/domain/types'
 import type { ServerInfo, SyncConflictInfo, SyncState } from '../../shared/ipc/protocol'
 import { BookRepository } from '../library/book-repository'
 import { storeCoverBytes } from '../library/cover-cache'
-import { reconcileProgress, type ReconcileAction } from './reconcile'
+import { reconcileProgress, withSaneTimestamp, type ReconcileAction } from './reconcile'
 import { KomgaCatalog } from './komga'
 import { CalibreCatalog, provisionKoboToken } from './calibre'
 import { LiseurSyncCatalog, liseurSyncLogin } from './liseur-sync'
@@ -412,10 +412,11 @@ export class SyncService {
    */
   private async reconcileRemoteRecord(
     bookId: string,
-    remote: ProgressRecord | null,
+    remoteRecord: ProgressRecord | null,
     localDirty: boolean,
     target?: { serverId: string; remoteId: string },
   ): Promise<void> {
+    const remote = withSaneTimestamp(remoteRecord)
     const localBook = this.books.getById(bookId)
     if (!localBook) return
     const local: ProgressRecord | null = localBook.progress
@@ -433,7 +434,7 @@ export class SyncService {
         if (remote?.locator || remote?.progression !== undefined || remote?.completed) {
           const at = remote.updatedAt ?? Date.now()
           const locator = remote.locator ?? localBook.progress?.locator ?? { href: '' }
-          const book = this.books.setProgress(bookId, locator, remote.progression, at)
+          const book = this.books.setProgress(bookId, locator, remote.progression, at, false)
           this.deps.onBookUpdated(book)
           // The pulled position WON: it must propagate to the remaining
           // targets, never the superseded local value still sitting in the
@@ -450,7 +451,7 @@ export class SyncService {
         if (remote?.completed && !localBook.finished) {
           const at = remote.updatedAt ?? Date.now()
           const locator = localBook.progress?.locator ?? { href: '' }
-          const book = this.books.setProgress(bookId, locator, 1, at)
+          const book = this.books.setProgress(bookId, locator, 1, at, false)
           this.deps.onBookUpdated(book)
           // Finished propagates like any other position (fresh queue version,
           // same anti-regression rule as pull).
@@ -849,7 +850,7 @@ export class SyncService {
   ): Promise<void> {
     const pull = await catalog.pullProgress(target.remoteId)
     if (pull.status === 'error') return // no ack recorded; retried next flush
-    const remote = pull.status === 'ok' ? pull.record : null
+    const remote = withSaneTimestamp(pull.status === 'ok' ? pull.record : null)
     const action = reconcileProgress(
       { locator: row.locator, progression: row.progression, updatedAt: row.updatedAt },
       remote,
@@ -861,6 +862,7 @@ export class SyncService {
         remote.locator ?? row.locator,
         remote.progression,
         remote.updatedAt ?? Date.now(),
+        false,
       )
       this.deps.onBookUpdated(updated)
       // Server state adopted: this target has the newer position.
@@ -973,6 +975,7 @@ export class SyncService {
         conflict.remoteLocator,
         conflict.remoteProgression,
         conflict.remoteUpdatedAt,
+        false,
       )
       this.deps.onBookUpdated(updated)
       // The chosen REMOTE position replaces the stale local one in the

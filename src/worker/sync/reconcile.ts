@@ -50,3 +50,25 @@ export function reconcileProgress(
   if (remoteChanged) return 'pull'
   return 'push' // local is newer-or-equal and dirty-free: converge upward
 }
+
+/**
+ * Strips a reading position's date when it claims to be in the future.
+ *
+ * Servers date positions with whatever clock wrote them, and a phone that
+ * is an hour fast produces a position dated an hour from now. Such a date
+ * beats every real position until the clock catches up: the book sticks to
+ * the Continue Reading banner, and the stale position it carries wins
+ * against the page you are actually on.
+ *
+ * The date is dropped rather than pulled back to now, because pulling it
+ * back to now would make it beat everything you read a moment ago — the
+ * same bug wearing a smaller number. A position nobody can date must not
+ * outrank one we can; ours then goes up to the server and settles it.
+ */
+export function withSaneTimestamp<T extends { updatedAt?: number | undefined }>(
+  record: T | null,
+  now = Date.now(),
+): T | null {
+  if (!record || record.updatedAt === undefined || record.updatedAt <= now) return record
+  return { ...record, updatedAt: undefined }
+}

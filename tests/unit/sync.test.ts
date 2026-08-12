@@ -613,6 +613,67 @@ describe('SyncService against mock Komga', () => {
     expect(repo.queue()).toHaveLength(0)
   })
 
+  it('a position dated in the future does not outrank what you read today', async () => {
+    // A device with a fast clock (or a server in the wrong timezone) dated
+    // a position an hour ahead. It beat every real position from then on:
+    // the book stuck to the Continue Reading banner and to the top of
+    // Recent, and would not move until the clock caught up with it.
+    const future = Date.now() + 3 * 3_600_000
+    const fetchImpl: FetchLike = async (url) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        return jsonResponse({
+          content: [
+            {
+              id: 'book-1',
+              name: 'Guidebook',
+              metadata: { title: 'Guidebook', authors: [] },
+              media: { pagesCount: 100 },
+              readProgress: { page: 27, completed: false },
+            },
+          ],
+          last: true,
+        })
+      }
+      if (path.endsWith('/progression')) {
+        return jsonResponse({
+          locator: { href: 'ch1.xhtml', locations: { totalProgression: 0.27 } },
+          modified: new Date(future).toISOString(),
+        })
+      }
+      return jsonResponse({}, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const synced = books.getById(repo.findByRemoteId(server.id, 'book-1')!.id)!
+    expect(synced.progress?.progression).toBeCloseTo(0.27)
+    expect(synced.progress?.updatedAt).toBeLessThanOrEqual(Date.now())
+
+    // A position arriving from a server is not you opening the book, so it
+    // must not claim the shelf's "recently opened" slot either.
+    expect(synced.lastOpenedAt).toBeUndefined()
+
+    // Worse than the ordering: a position dated in the future looks newer
+    // than the page you are actually on, so the server's stale position
+    // won every comparison and picked a fight with your real one.
+    const read = books.setProgress(synced.id, { href: 'ch9.xhtml' }, 0.8, Date.now())
+    service.enqueueProgress(read, { href: 'ch9.xhtml' }, 0.8)
+    await service.syncNow(server.id)
+    expect(service.conflicts()).toHaveLength(0)
+    expect(books.getById(synced.id)?.progress?.progression).toBeCloseTo(0.8)
+  })
+
   it('a sync of an untouched shelf does not ask about every book', async () => {
     // Komga puts read progress on every book in a listing page, so asking
     // again book by book is a round trip per book on every single sync: on

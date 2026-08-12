@@ -210,4 +210,32 @@ export const MIGRATIONS: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 7,
+    name: 'undate positions from the future',
+    up: (db) => {
+      // A server dated some positions later than they could possibly have
+      // been read: a device with a fast clock, or a server in the wrong
+      // timezone. Such a book outranks everything read since, so it sat on
+      // the Continue Reading banner and at the top of Recent, and would
+      // have kept its place for as long as its date stayed ahead.
+      //
+      // A position from a server can be no newer than the last time we
+      // spoke to that server, which is the honest bound to pull it back to.
+      // For anything else, now.
+      const now = Date.now()
+      db.prepare(
+        `UPDATE reading_progress SET updated_at = MIN(?, COALESCE(
+           (SELECT s.last_sync_at FROM books b
+              LEFT JOIN remote_servers s ON s.id = b.server_id
+             WHERE b.id = reading_progress.book_id), ?))
+         WHERE updated_at > ?`,
+      ).run(now, now, now)
+      db.prepare(
+        `UPDATE books SET last_opened_at = MIN(?, COALESCE(
+           (SELECT s.last_sync_at FROM remote_servers s WHERE s.id = books.server_id), ?))
+         WHERE last_opened_at > ?`,
+      ).run(now, now, now)
+    },
+  },
 ]

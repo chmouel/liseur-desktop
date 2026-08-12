@@ -230,8 +230,21 @@ export class BookRepository {
    * Saves reading progress (upsert) and marks the book recently opened.
    * Finished state follows from progression ≥ 1. Returns the fresh book for
    * the bookUpdated broadcast.
+   *
+   * `opened` is false for a position that arrived from a server. Opening a
+   * book is something you do at this machine, and letting a sync claim it
+   * meant another device's clock could rewrite your own reading history.
+   * A future-dated timestamp is clamped for the same reason: nothing can
+   * have been read later than now.
    */
-  setProgress(id: string, locator: unknown, progression: number | undefined, when: number): Book {
+  setProgress(
+    id: string,
+    locator: unknown,
+    progression: number | undefined,
+    at: number,
+    opened = true,
+  ): Book {
+    const when = Math.min(at, Date.now())
     this.db
       .prepare(
         `INSERT INTO reading_progress (book_id, locator, progression, updated_at)
@@ -245,11 +258,12 @@ export class BookRepository {
     // Only a real progression flips finished state; a locator-only save
     // (progression unknown) must never unfinish a book.
     if (progression !== undefined && progression >= 1) {
-      this.db
-        .prepare('UPDATE books SET last_opened_at = ?, finished = 1 WHERE id = ?')
-        .run(when, id)
-    } else {
-      this.db.prepare('UPDATE books SET last_opened_at = ? WHERE id = ?').run(when, id)
+      this.db.prepare('UPDATE books SET finished = 1 WHERE id = ?').run(id)
+    }
+    if (!opened) {
+      const book = this.getById(id)
+      if (!book) throw new Error(`unknown book ${id}`)
+      return book
     }
     return this.touchOpened(id, when)
   }
