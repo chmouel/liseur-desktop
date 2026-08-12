@@ -49,6 +49,10 @@ test.beforeAll(async () => {
   const { app } = await launch()
   await app.close()
   writeFileSync(join(booksDir, 'reader.epub'), buildReaderEpub({ chapters: 3 }))
+  writeFileSync(
+    join(booksDir, 'second.epub'),
+    buildReaderEpub({ chapters: 3, title: 'Second Tome' }),
+  )
   const db = new DatabaseSync(join(dataDir, 'liseur.db'))
   db.prepare('INSERT INTO folders (id, path, added_at) VALUES (?, ?, ?)').run(
     'reader-folder',
@@ -117,6 +121,35 @@ test('opens, paginates, persists and restores progress', async () => {
     await expect
       .poll(() => page.locator('.reader-footer').textContent(), { timeout: 10_000 })
       .toBe(atChapter3)
+  } finally {
+    await app.close()
+  }
+})
+
+test('the banner follows you to the book you just opened', async () => {
+  // Opening a book and going straight back out — the wrong book, or a
+  // glance at the first page — left the PREVIOUS book on the Continue
+  // Reading banner. The banner only knew about books with a saved reading
+  // position, and a book closed before it finished loading never saves one.
+  const { app, page } = await launch()
+  try {
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.locator('.search-input').fill('Second Tome')
+    const card = page.getByRole('gridcell', { name: /Second Tome/ })
+    await expect(card).toBeVisible({ timeout: 10_000 })
+    await card.click()
+    // Straight back out, before the book has even finished opening — the
+    // "wrong book" case. Nothing is saved for a book closed this early, so
+    // a banner that goes by saved positions alone stays on the old book.
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('.library-screen')
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+
+    const banner = page.locator('.continue-reading')
+    await expect(banner).toBeVisible({ timeout: 10_000 })
+    await expect(banner.locator('.continue-title')).toHaveText('Second Tome')
   } finally {
     await app.close()
   }

@@ -127,6 +127,11 @@ export function initLibrary(): void {
       next[index] = book
       return next
     })
+    // The banner holds its own copy of the book. Closing the reader shows
+    // the library before the final position is saved (visual first), so the
+    // save lands here — without this the banner kept showing the position
+    // from when the book was opened.
+    setContinueReadingBook((current) => (current?.id === book.id ? book : current))
   })
   // Ingestion reports books one at a time; a scan can add hundreds, so
   // collapse bursts into a single re-query instead of inserting per event

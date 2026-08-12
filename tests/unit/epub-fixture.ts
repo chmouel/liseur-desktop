@@ -150,9 +150,20 @@ export function buildReaderEpub(
     publisherStyles?: boolean
     /** Words per chapter — raise it when a test needs several pages. */
     words?: number
+    /** Overrides the title and identifier, for tests that need two books. */
+    title?: string
   } = {},
 ): Buffer {
-  const { chapters = 3, ncx = false, publisherStyles = false, words = 200 } = options
+  const {
+    chapters = 3,
+    ncx = false,
+    publisherStyles = false,
+    words = 200,
+    title = ncx ? 'Reader Fixture (NCX)' : 'Reader Fixture',
+  } = options
+  // A distinct title needs a distinct identifier, or two fixture books look
+  // like the same book to anything that dedupes on it.
+  const identifier = `fixture-${ncx ? 'ncx' : 'nav'}-${title.replace(/\W+/g, '-').toLowerCase()}`
 
   const chapterEntries: FixtureEntry[] = []
   const manifestItems: string[] = []
@@ -208,9 +219,9 @@ export function buildReaderEpub(
     ? `<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Reader Fixture (NCX)</dc:title>
+    <dc:title>${title}</dc:title>
     <dc:creator id="a">Fixture Author</dc:creator>
-    <dc:identifier id="bookid">fixture-ncx-1</dc:identifier>
+    <dc:identifier id="bookid">${identifier}</dc:identifier>
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
@@ -223,9 +234,9 @@ export function buildReaderEpub(
     : `<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="3.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Reader Fixture</dc:title>
+    <dc:title>${title}</dc:title>
     <dc:creator id="a">Fixture Author</dc:creator>
-    <dc:identifier id="bookid">fixture-nav-1</dc:identifier>
+    <dc:identifier id="bookid">${identifier}</dc:identifier>
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
