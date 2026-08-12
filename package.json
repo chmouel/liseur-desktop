@@ -1,12 +1,24 @@
 {
   "name": "liseur-desktop",
   "version": "0.1.0",
-  "description": "Snappy cross-platform desktop EPUB reader — desktop counterpart of Liseur for Android",
+  "description": "Snappy cross-platform desktop EPUB reader \u2014 desktop counterpart of Liseur for Android",
+  "homepage": "https://github.com/chmouel/liseur-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chmouel/liseur-desktop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chmouel/liseur-desktop/issues"
+  },
   "license": "MIT",
-  "author": "Chmouel Boudjnah",
+  "author": {
+    "name": "Chmouel Boudjnah",
+    "email": "chmouel@chmouel.com"
+  },
   "private": true,
   "type": "module",
   "main": "out/main/main.cjs",
+  "desktopName": "liseur.desktop",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

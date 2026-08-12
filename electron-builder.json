@@ -1,12 +1,76 @@
 {
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.chmouel.liseur",
   "productName": "Liseur",
+  "copyright": "Copyright \u00a9 Chmouel Boudjnah",
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "build"
   },
   "files": ["out/**", "package.json"],
   "asar": true,
-  "linux": { "target": ["dir"], "category": "Education" },
-  "mac": { "target": ["dir"], "category": "public.app-category.education" },
-  "win": { "target": ["dir"] }
+  "compression": "maximum",
+  "removePackageScripts": true,
+  "removePackageKeywords": true,
+  "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "tar.gz",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "category": "Office;Viewer;Literature",
+    "synopsis": "Snappy desktop EPUB reader",
+    "desktop": {
+      "entry": {
+        "MimeType": "application/epub+zip",
+        "Keywords": "epub;ebook;reader;books"
+      }
+    },
+    "executableName": "liseur",
+    "syncDesktopName": true
+  },
+  "deb": {
+    "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libasound2t64"]
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "category": "public.app-category.education",
+    "darkModeSupport": true,
+    "identity": null,
+    "extendInfo": {
+      "CFBundleDocumentTypes": [
+        {
+          "CFBundleTypeName": "EPUB book",
+          "CFBundleTypeRole": "Viewer",
+          "LSHandlerRank": "Alternate",
+          "LSItemContentTypes": ["org.idpf.epub-container"]
+        }
+      ]
+    }
+  },
+  "dmg": {
+    "writeUpdateInfo": false
+  },
+  "win": {
+    "target": ["dir"]
+  }
 }
