@@ -5,13 +5,8 @@ import { VirtualBookGrid } from './VirtualBookGrid'
 import { ContinueReading } from './ContinueReading'
 import { SettingsScreen } from '../settings/SettingsScreen'
 import { useTheme } from '../app/theme'
-
-const FILTERS: readonly { id: LibraryFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'downloaded', label: 'Downloaded' },
-  { id: 'unread', label: 'Unread' },
-  { id: 'archived', label: 'Archived' },
-]
+import brandTile from '../assets/brand-tile.webp'
+import brandTileDark from '../assets/brand-tile-dark.webp'
 
 const SORTS: readonly { id: LibrarySortKey; label: string }[] = [
   { id: 'recent', label: 'Recent' },
@@ -22,13 +17,30 @@ const SORTS: readonly { id: LibrarySortKey; label: string }[] = [
 
 export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): JSX.Element {
   const store = useLibraryStore()
-  const { theme, setTheme } = useTheme()
+  const { theme, dark, setTheme } = useTheme()
 
   const [searchOpen, setSearchOpen] = createSignal(false)
   const [selectedIndex, setSelectedIndex] = createSignal(-1)
   const [settingsOpen, setSettingsOpen] = createSignal(false)
+  const [sortMenuOpen, setSortMenuOpen] = createSignal(false)
   let searchInput: HTMLInputElement | undefined
   let gridEl: HTMLDivElement | undefined
+
+  // Chips a library has nothing to say with are left off rather than shown
+  // inert: with no server every book is downloaded, and with nothing put
+  // away the archive drawer is empty.
+  const filters = (): { id: LibraryFilter; label: string }[] => {
+    const list: { id: LibraryFilter; label: string }[] = [{ id: 'all', label: 'All' }]
+    if (store.hasServer()) list.push({ id: 'downloaded', label: 'Downloaded' })
+    list.push({ id: 'unread', label: 'Unread' })
+    if (store.archivedCount() > 0 || store.filter() === 'archived') {
+      list.push({ id: 'archived', label: 'Archived' })
+    }
+    return list
+  }
+
+  const sortLabel = () => SORTS.find((s) => s.id === store.sort())?.label ?? 'Recent'
+  const directionArrow = () => (store.direction() === 'asc' ? '↑' : '↓')
 
   const openSearch = () => {
     setSearchOpen(true)
@@ -61,6 +73,10 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
     if (inField) return
     if (settingsOpen()) {
       if (e.key === 'Escape') setSettingsOpen(false)
+      return
+    }
+    if (sortMenuOpen() && e.key === 'Escape') {
+      setSortMenuOpen(false)
       return
     }
 
@@ -126,10 +142,22 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
     <div class="library-screen">
       <header class="topbar">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true">
-            L
-          </span>
-          <span class="brand-name">Liseur</span>
+          <img
+            class="brand-tile"
+            src={dark() ? brandTileDark : brandTile}
+            alt=""
+            width={96}
+            height={44}
+            draggable={false}
+          />
+          <div class="brand-text">
+            <span class="brand-name">Liseur</span>
+            <Show when={!store.loading() && store.totalCount() > 0}>
+              <span class="brand-count">
+                {store.totalCount().toLocaleString()} {store.totalCount() === 1 ? 'book' : 'books'}
+              </span>
+            </Show>
+          </div>
         </div>
 
         <Show when={searchOpen()}>
@@ -193,7 +221,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
 
       <div class="filter-bar">
         <div class="chips" role="tablist" aria-label="Library filters">
-          <For each={FILTERS}>
+          <For each={filters()}>
             {(f) => (
               <button
                 type="button"
@@ -209,23 +237,49 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
           </For>
         </div>
 
-        <div class="sort-controls">
-          <For each={SORTS}>
-            {(s) => (
-              <button
-                type="button"
-                class="sort-button"
-                classList={{ active: store.sort() === s.id }}
-                onClick={() => store.setSort(s.id)}
-                aria-pressed={store.sort() === s.id}
-              >
-                {s.label}
-                {store.sort() === s.id && (
-                  <span aria-hidden="true">{store.direction() === 'asc' ? ' ↑' : ' ↓'}</span>
+        <div class="sort-menu">
+          <button
+            type="button"
+            class="sort-trigger"
+            aria-haspopup="menu"
+            aria-expanded={sortMenuOpen()}
+            onClick={() => setSortMenuOpen((open) => !open)}
+          >
+            {sortLabel()}
+            <span class="sort-direction" aria-hidden="true">
+              {directionArrow()}
+            </span>
+          </button>
+          <Show when={sortMenuOpen()}>
+            <div
+              class="sort-menu-backdrop"
+              onClick={() => setSortMenuOpen(false)}
+              aria-hidden="true"
+            />
+            <div class="sort-menu-items" role="menu">
+              <For each={SORTS}>
+                {(s) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="sort-menu-item"
+                    classList={{ active: store.sort() === s.id }}
+                    onClick={() => {
+                      // Picking the order you are already in flips it; the
+                      // row would otherwise be dead under the pointer.
+                      store.setSort(s.id)
+                      setSortMenuOpen(false)
+                    }}
+                  >
+                    <span>{s.label}</span>
+                    <Show when={store.sort() === s.id}>
+                      <span aria-hidden="true">{directionArrow()}</span>
+                    </Show>
+                  </button>
                 )}
-              </button>
-            )}
-          </For>
+              </For>
+            </div>
+          </Show>
         </div>
       </div>
 

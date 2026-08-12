@@ -18,7 +18,12 @@ export class LibraryService {
 
   query(query: LibraryQuery, requestId: number): LibraryQueryResult {
     const books = this.repository.query(query)
-    return { books, totalCount: books.length, requestId }
+    return {
+      books,
+      totalCount: books.length,
+      archivedCount: this.repository.countArchived(),
+      requestId,
+    }
   }
 
   /** The single most recently updated in-progress book. */

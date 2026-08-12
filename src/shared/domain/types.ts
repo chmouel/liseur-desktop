@@ -67,6 +67,11 @@ export interface LibraryQuery {
 export interface LibraryQueryResult {
   books: Book[]
   totalCount: number
+  /**
+   * How many books are archived, whatever the filter asked for. The library
+   * only offers the Archived chip once something has been put away.
+   */
+  archivedCount: number
   /** Echo of the request id so the renderer can discard stale results. */
   requestId: number
 }

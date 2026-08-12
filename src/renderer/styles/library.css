@@ -26,28 +26,40 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--logo-field);
-  color: var(--leather);
-  font-family: Georgia, serif;
-  font-size: 17px;
-  font-weight: 700;
-  border: 1px solid var(--border);
+/* The reading-scene tile from the Android app, framed as a small picture
+   rather than knocked out to a monogram. Fixed aspect so the frame can
+   never come out wider than the art and slice her head off. */
+.brand-tile {
+  display: block;
+  height: 44px;
+  width: auto;
+  aspect-ratio: 838 / 383;
+  object-fit: contain;
+  border-radius: 10px;
+  user-select: none;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
 }
 
 .brand-name {
   font-family: Georgia, serif;
-  font-size: 18px;
+  font-size: 20px;
   letter-spacing: 0.02em;
+}
+
+.brand-count {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .search-input {
@@ -133,26 +145,75 @@
   color: var(--on-accent);
 }
 
-.sort-controls {
-  display: flex;
-  gap: 2px;
+.sort-menu {
+  position: relative;
+  flex-shrink: 0;
 }
 
-.sort-button {
-  padding: 4px 10px;
+.sort-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--accent);
   cursor: pointer;
+  font: inherit;
   font-size: 13px;
 }
 
-.sort-button:hover {
+.sort-trigger:hover {
   background: var(--bg-sunken);
 }
 
-.sort-button.active {
+.sort-direction {
+  font-size: 12px;
+}
+
+.sort-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.sort-menu-items {
+  position: absolute;
+  z-index: 21;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.sort-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.sort-menu-item:hover {
+  background: var(--bg-sunken);
+}
+
+.sort-menu-item.active {
   color: var(--accent-strong);
   font-weight: 600;
 }
@@ -424,7 +485,6 @@
 
 .continue-progress {
   flex: 1;
-  max-width: 320px;
   height: 4px;
   border-radius: 2px;
   background: var(--bg-sunken);

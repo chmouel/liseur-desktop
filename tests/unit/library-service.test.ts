@@ -83,6 +83,15 @@ describe('LibraryService.query', () => {
     expect(query({ filter: 'archived' }).books.map((b) => b.id)).toEqual(['d'])
   })
 
+  it('counts archived books whatever the filter asked for', () => {
+    // The library only offers the Archived chip once something is in there,
+    // so the count has to survive a query that excludes archived books.
+    expect(query({}).archivedCount).toBe(1)
+    expect(query({ filter: 'unread' }).archivedCount).toBe(1)
+    expect(query({ filter: 'archived' }).archivedCount).toBe(1)
+    expect(query({ search: 'nothing matches this' }).archivedCount).toBe(1)
+  })
+
   it('searches title and author case-insensitively', () => {
     expect(query({ search: 'glass' }).books.map((b) => b.id)).toEqual(['a'])
     expect(query({ search: 'LEA' }).books.map((b) => b.id)).toEqual(['c', 'a'])

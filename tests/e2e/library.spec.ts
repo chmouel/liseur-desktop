@@ -48,6 +48,25 @@ test('launches and renders the library shell', async () => {
   await expect(page.locator('.book-card').first()).toBeVisible()
 })
 
+test('the top bar carries the brand tile and the size of the shelf', async () => {
+  // The reading-scene art, matching the Android app's top bar. It must
+  // actually decode: a broken import still lays out as an <img>.
+  const decoded = await page.locator('.brand-tile').evaluate((el) => {
+    const img = el as HTMLImageElement
+    return img.complete && img.naturalWidth > 0
+  })
+  expect(decoded).toBe(true)
+
+  // The count follows the filter, as it does on Android: it says how big
+  // the shelf you are looking at is, not how many rows the database holds.
+  await expect(page.locator('.brand-count')).toHaveText(/^[\d,]+ books$/)
+  const all = await page.locator('.brand-count').textContent()
+  await page.getByRole('tab', { name: 'Unread' }).click()
+  await expect.poll(() => page.locator('.brand-count').textContent()).not.toBe(all)
+  await page.getByRole('tab', { name: 'All' }).click()
+  await expect(page.locator('.brand-count')).toHaveText(all!)
+})
+
 test('renderer has no Node access', async () => {
   const [hasNode, hasApi] = await page.evaluate(() => [
     'process' in globalThis || 'require' in globalThis,
@@ -77,21 +96,38 @@ test('search input updates immediately and filters results', async () => {
 
 test('filters switch the visible set', async () => {
   const allTitle = await page.locator('.book-title').first().textContent()
-  await page.getByRole('tab', { name: 'Downloaded' }).click()
-  // Downloaded is a subset with a different first book than the default
-  // "Recent" ordering of All.
+  // Archived books are excluded from every other filter, so the drawer
+  // always holds a different first book than All.
+  await page.getByRole('tab', { name: 'Archived' }).click()
   await expect.poll(() => page.locator('.book-title').first().textContent()).not.toBe(allTitle)
-  await expect(page.getByRole('tab', { name: 'Downloaded' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
+  await expect(page.getByRole('tab', { name: 'Archived' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: 'All' }).click()
+})
+
+test('the downloaded chip stays off until a server is configured', async () => {
+  // With local files alone every book is downloaded and the chip selects
+  // everything, so it is left off rather than shown inert.
+  await expect(page.getByRole('tab', { name: 'Downloaded' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'All' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Unread' })).toBeVisible()
 })
 
 test('sorting by title reorders the grid', async () => {
   const firstTitle = await page.locator('.book-title').first().textContent()
-  await page.getByRole('button', { name: /^Title/ }).click()
+  await page.locator('.sort-trigger').click()
+  await page.getByRole('menuitem', { name: /^Title/ }).click()
   await expect.poll(() => page.locator('.book-title').first().textContent()).not.toBe(firstTitle)
+  await expect(page.locator('.sort-trigger')).toContainText('Title')
+
+  // Choosing the order you are already in turns it around rather than
+  // doing nothing.
+  const ascending = await page.locator('.book-title').first().textContent()
+  await page.locator('.sort-trigger').click()
+  await page.getByRole('menuitem', { name: /^Title/ }).click()
+  await expect.poll(() => page.locator('.book-title').first().textContent()).not.toBe(ascending)
+
+  await page.locator('.sort-trigger').click()
+  await page.getByRole('menuitem', { name: 'Recent', exact: true }).click()
 })
 
 test('keyboard navigation moves selection', async () => {

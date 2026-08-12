@@ -30,6 +30,8 @@ const [direction, setDirectionSignal] = createSignal<SortDirection>(DEFAULT_QUER
 
 const [books, setBooks] = createSignal<Book[]>([])
 const [totalCount, setTotalCount] = createSignal(0)
+const [archivedCount, setArchivedCount] = createSignal(0)
+const [hasServer, setHasServer] = createSignal(false)
 const [loading, setLoading] = createSignal(true)
 const [continueReadingBook, setContinueReadingBook] = createSignal<Book | null>(null)
 
@@ -44,6 +46,8 @@ export function useLibraryStore() {
     direction,
     books,
     totalCount,
+    archivedCount,
+    hasServer,
     loading,
     continueReadingBook,
     setSearchText,
@@ -89,6 +93,7 @@ async function refresh(): Promise<void> {
     if (myGeneration !== generation) return // stale — a newer query is in flight
     setBooks(result.books)
     setTotalCount(result.totalCount)
+    setArchivedCount(result.archivedCount)
     setLoading(false)
     done()
   } catch (err) {
@@ -110,6 +115,10 @@ let bookAddedDebounce: ReturnType<typeof setTimeout> | undefined
 export function initLibrary(): void {
   void refresh()
   void refreshContinueReading()
+  // The Downloaded chip is only meaningful once some books live on a server
+  // and some do not; with local files alone it selects everything.
+  window.liseur.sync.onStateChanged((state) => setHasServer(state.servers.length > 0))
+  void window.liseur.sync.getState().then((state) => setHasServer(state.servers.length > 0))
   window.liseur.library.onBookUpdated((book) => {
     setBooks((current) => {
       const index = current.findIndex((b) => b.id === book.id)

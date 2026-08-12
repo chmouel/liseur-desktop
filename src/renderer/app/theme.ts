@@ -16,11 +16,22 @@ function applyDomTheme(): void {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light'
 }
 
+/**
+ * Whether dark is the theme actually in force, with 'system' resolved. The
+ * brand art comes in two cuts and has to pick one, and the data attribute
+ * on <html> is not readable from a reactive context.
+ */
+function dark(): boolean {
+  const t = theme()
+  return t === 'dark' || (t === 'system' && osDark())
+}
+
 export function useTheme(): {
   theme: () => AppTheme
+  dark: () => boolean
   setTheme: (t: AppTheme) => void
 } {
-  return { theme, setTheme }
+  return { theme, dark, setTheme }
 }
 
 function setTheme(t: AppTheme): void {

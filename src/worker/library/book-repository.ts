@@ -142,6 +142,13 @@ export class BookRepository {
     return row.n
   }
 
+  countArchived(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM books WHERE archived = 1').get() as {
+      n: number
+    }
+    return row.n
+  }
+
   countByFolder(folderId: string): number {
     const row = this.db
       .prepare('SELECT COUNT(*) AS n FROM books WHERE folder_id = ?')
