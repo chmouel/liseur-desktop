@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Prettier
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

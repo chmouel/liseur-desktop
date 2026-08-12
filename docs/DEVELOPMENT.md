@@ -21,6 +21,16 @@ pnpm test:e2e   # Playwright, against the production build
 
 `pnpm test:e2e` runs the built app, so `pnpm build` has to come first.
 
+## Git hooks
+
+Install the pre-push formatting check after cloning:
+
+```bash
+pre-commit install --config .pre-commit.yaml --hook-type pre-push
+```
+
+It runs `pnpm format:check` before every push.
+
 ## Adding or updating a dependency
 
 Installs refuse any version published less than fourteen days ago. If pnpm
