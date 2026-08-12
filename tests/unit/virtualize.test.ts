@@ -43,4 +43,24 @@ describe('computeRange', () => {
     const r = computeRange(0, 8, 256, 0, 800)
     expect(r).toMatchObject({ start: 0, end: 0, totalHeight: 0 })
   })
+
+  it('ignores scroll spent on a header above the grid', () => {
+    // 300px header: scrolling 300px only reaches the first row.
+    const flush = computeRange(5000, 8, 256, 0, 800)
+    const scrolled = computeRange(5000, 8, 256, 300, 800, 3, 300)
+    expect(scrolled.start).toBe(flush.start)
+    expect(scrolled.offsetTop).toBe(0)
+  })
+
+  it('offsets rows by the header height when scrolled past it', () => {
+    const withHeader = computeRange(5000, 8, 256, 100 * 256 + 300, 800, 3, 300)
+    const without = computeRange(5000, 8, 256, 100 * 256, 800)
+    expect(withHeader).toEqual(without)
+  })
+
+  it('never lets a header push the effective scroll negative', () => {
+    const r = computeRange(5000, 8, 256, 50, 800, 3, 300)
+    expect(r.start).toBe(0)
+    expect(r.offsetTop).toBe(0)
+  })
 })

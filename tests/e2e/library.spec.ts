@@ -84,6 +84,20 @@ test('the brand mark takes you back to the top of the shelf', async () => {
   await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0)
 })
 
+test('the continue-reading banner scrolls away with the shelf', async () => {
+  // The banner is part of the shelf, not chrome pinned above it: scrolling
+  // the grid carries it off screen instead of leaving it eating height.
+  const banner = page.locator('.continue-reading')
+  const scroll = page.locator('.book-grid-scroll')
+  await expect(banner).toBeVisible()
+  await scroll.evaluate((el) => el.scrollTo({ top: 4000 }))
+  await expect(banner).not.toBeInViewport()
+  // Rows still start where they should once the banner has gone by.
+  await expect(page.locator('.book-card').first()).toBeVisible()
+  await page.locator('.brand').click()
+  await expect(banner).toBeInViewport()
+})
+
 test('renderer has no Node access', async () => {
   const [hasNode, hasApi] = await page.evaluate(() => [
     'process' in globalThis || 'require' in globalThis,

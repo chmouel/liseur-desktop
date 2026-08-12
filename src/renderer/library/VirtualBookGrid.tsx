@@ -28,28 +28,48 @@ interface Props {
   onSelect: (index: number) => void
   onOpen: (index: number) => void
   gridRef?: (el: HTMLDivElement) => void
+  /** Optional content that scrolls away above the grid (e.g. the
+      continue-reading banner). Its height is measured, so the row math
+      stays exact whatever it renders. */
+  header?: JSX.Element
 }
 
 export function VirtualBookGrid(props: Props): JSX.Element {
   let container: HTMLDivElement | undefined
+  let headerEl: HTMLDivElement | undefined
   const [size, setSize] = createSignal({ width: 0, height: 0 })
+  const [headerHeight, setHeaderHeight] = createSignal(0)
   const [scrollTop, setScrollTop] = createSignal(0)
   let raf = 0
 
   onMount(() => {
     if (!container) return
     const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (entry) setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+      for (const entry of entries) {
+        if (entry.target === container) {
+          setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+        } else if (entry.target === headerEl) {
+          setHeaderHeight(entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height)
+        }
+      }
     })
     observer.observe(container)
+    if (headerEl) observer.observe(headerEl)
     onCleanup(() => observer.disconnect())
   })
 
   const columns = () => computeColumns(size().width, CARD_WIDTH, GAP)
 
   const range = () =>
-    computeRange(props.books().length, columns(), ROW_HEIGHT, scrollTop(), size().height)
+    computeRange(
+      props.books().length,
+      columns(),
+      ROW_HEIGHT,
+      scrollTop(),
+      size().height,
+      undefined,
+      headerHeight(),
+    )
 
   // rAF-throttled scroll: at most one state update per frame.
   const onScroll = (e: Event) => {
@@ -59,12 +79,13 @@ export function VirtualBookGrid(props: Props): JSX.Element {
   }
   onCleanup(() => cancelAnimationFrame(raf))
 
-  // Keep the keyboard selection visible.
+  // Keep the keyboard selection visible. The header above the grid shifts
+  // every row down by its height inside the shared scroll box.
   createEffect(() => {
     const index = props.selectedIndex()
     if (index < 0 || !container) return
     const row = Math.floor(index / columns())
-    const top = row * ROW_HEIGHT
+    const top = headerHeight() + row * ROW_HEIGHT
     const bottom = top + ROW_HEIGHT
     if (top < container.scrollTop) container.scrollTop = top
     else if (bottom > container.scrollTop + container.clientHeight) {
@@ -86,6 +107,16 @@ export function VirtualBookGrid(props: Props): JSX.Element {
       aria-label="Library"
       aria-rowcount={Math.ceil(props.books().length / columns())}
     >
+      {/* Always in the tree so one observer registration at mount is
+          enough: when the banner is gated off, the wrapper measures 0. */}
+      <div
+        class="book-grid-header"
+        ref={(el) => {
+          headerEl = el
+        }}
+      >
+        {props.header}
+      </div>
       <div style={{ height: `${range().totalHeight}px`, position: 'relative' }}>
         <div
           class="book-grid"

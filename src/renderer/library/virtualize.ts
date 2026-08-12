@@ -39,12 +39,20 @@ export function computeRange(
   scrollTop: number,
   viewportHeight: number,
   overscanRows = 3,
+  headerHeight = 0,
 ): VirtualRange {
   const totalRows = Math.ceil(itemCount / columns)
   const totalHeight = totalRows * rowHeight
 
-  const firstVisibleRow = Math.max(0, Math.floor(scrollTop / rowHeight))
-  const lastVisibleRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / rowHeight))
+  // A header (e.g. the continue-reading banner) can sit inside the scroll
+  // box above the grid; the rows only start scrolling once it has gone by.
+  const gridScrollTop = Math.max(0, scrollTop - headerHeight)
+
+  const firstVisibleRow = Math.max(0, Math.floor(gridScrollTop / rowHeight))
+  const lastVisibleRow = Math.min(
+    totalRows,
+    Math.ceil((gridScrollTop + viewportHeight) / rowHeight),
+  )
 
   const startRow = Math.max(0, firstVisibleRow - overscanRows)
   const endRow = Math.min(totalRows, lastVisibleRow + overscanRows)

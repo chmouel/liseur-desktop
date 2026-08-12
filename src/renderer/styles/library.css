@@ -48,7 +48,7 @@
    grows this on a wide screen; a desktop window is always wide. */
 .brand-tile {
   display: block;
-  height: 72px;
+  height: 120px;
   width: auto;
   aspect-ratio: 838 / 383;
   object-fit: contain;
@@ -163,7 +163,7 @@
   }
 
   .brand-tile {
-    height: 48px;
+    height: 72px;
   }
 
   .brand-name {
@@ -644,6 +644,12 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Padding, not margin, keeps the gap under the banner inside the wrapper's
+   border box — the measured height the virtualization offsets rows by. */
+.book-grid-header:not(:empty) {
+  padding-bottom: 16px;
 }
 
 .book-grid {

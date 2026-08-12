@@ -294,8 +294,8 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
             class="brand-tile"
             src={dark() ? brandTileDark : brandTile}
             alt=""
-            width={200}
-            height={150}
+            width={263}
+            height={120}
             draggable={false}
           />
           <span class="brand-text">
@@ -452,16 +452,6 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       </div>
 
       <main class="library-main">
-        <Show when={store.filter() === 'all' && !store.searchText()}>
-          <ContinueReading
-            book={store.continueReadingBook()}
-            onOpen={() => {
-              const book = store.continueReadingBook()
-              if (book?.localPath) props.onOpenBook(book.id)
-            }}
-          />
-        </Show>
-
         <Show when={!store.loading() && store.books().length === 0}>
           <p class="empty-state">
             {store.searchText() ? `No books match “${store.searchText()}”.` : 'No books here yet.'}
@@ -474,6 +464,17 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
           onSelect={setSelectedIndex}
           onOpen={openBook}
           gridRef={(el) => (gridEl = el)}
+          header={
+            <Show when={store.filter() === 'all' && !store.searchText()}>
+              <ContinueReading
+                book={store.continueReadingBook()}
+                onOpen={() => {
+                  const book = store.continueReadingBook()
+                  if (book?.localPath) props.onOpenBook(book.id)
+                }}
+              />
+            </Show>
+          }
         />
       </main>
     </div>
