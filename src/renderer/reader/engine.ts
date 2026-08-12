@@ -720,7 +720,8 @@ function asHtmlDocument(root: Element): Document {
   return doc
 }
 
-export function flattenToc(toc: readonly TocEntry[]): TocEntry[] {  const out: TocEntry[] = []
+export function flattenToc(toc: readonly TocEntry[]): TocEntry[] {
+  const out: TocEntry[] = []
   const walk = (entries: readonly TocEntry[]) => {
     for (const entry of entries) {
       out.push(entry)
