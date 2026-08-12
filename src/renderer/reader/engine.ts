@@ -18,7 +18,9 @@ import {
   itemDirOf,
   columnGapFor,
   clampFontSize,
+  clampMeasure,
   DEFAULT_FONT_SIZE,
+  DEFAULT_MEASURE,
 } from './reader-theme'
 import { buildTextStream, locatorForRange, rangeForLocator } from './anchoring'
 
@@ -87,6 +89,7 @@ export interface ReaderEngine {
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   fontSize: DEFAULT_FONT_SIZE,
   columns: 1,
+  measure: DEFAULT_MEASURE,
 }
 
 /**
@@ -128,7 +131,11 @@ export class ColumnEngine implements ReaderEngine {
     private readonly toc: TocEntry[],
     initial: ReaderPreferences,
   ) {
-    this.prefs = { ...initial, fontSize: clampFontSize(initial.fontSize) }
+    this.prefs = {
+      ...initial,
+      fontSize: clampFontSize(initial.fontSize),
+      measure: clampMeasure(initial.measure),
+    }
     // Non-linear items count as 0 pages: linear page turning never visits
     // them, so they must not weigh on total progression estimates.
     this.pageCounts = spine.map((s) => (s.linear ? null : 0))
@@ -227,7 +234,11 @@ export class ColumnEngine implements ReaderEngine {
   }
 
   setPreferences(prefs: ReaderPreferences): void {
-    this.prefs = { ...prefs, fontSize: clampFontSize(prefs.fontSize) }
+    this.prefs = {
+      ...prefs,
+      fontSize: clampFontSize(prefs.fontSize),
+      measure: clampMeasure(prefs.measure),
+    }
     this.relayout()
   }
 

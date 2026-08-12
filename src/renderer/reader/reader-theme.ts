@@ -29,7 +29,34 @@ export function columnGapFor(columns: number): number {
  * roughly 70 characters — the classic readable measure. Wider than this and
  * the eye loses the line on the way back.
  */
-const MEASURE_EM = 36
+export const DEFAULT_MEASURE = 36
+
+/**
+ * Margin presets, as the measure each one leaves for the text. Narrow
+ * margins give the text more room, so they are the largest number.
+ *
+ * The bounds are deliberately not symmetric around the default: 20em is
+ * about 40 characters, which is as narrow as prose stays readable, while
+ * 60em is wide enough to fill a large screen for anyone who prefers
+ * fewer page turns to a classic measure.
+ */
+export const MARGIN_PRESETS = { wide: 28, normal: DEFAULT_MEASURE, narrow: 46 } as const
+export type MarginPreset = keyof typeof MARGIN_PRESETS
+
+export const MIN_MEASURE = 20
+export const MAX_MEASURE = 60
+
+export function clampMeasure(measure: number): number {
+  if (!Number.isFinite(measure)) return DEFAULT_MEASURE
+  return Math.min(MAX_MEASURE, Math.max(MIN_MEASURE, Math.round(measure)))
+}
+
+/** The preset a measure corresponds to, or undefined for a custom width. */
+export function marginPresetFor(measure: number): MarginPreset | undefined {
+  return (Object.keys(MARGIN_PRESETS) as MarginPreset[]).find(
+    (name) => MARGIN_PRESETS[name] === measure,
+  )
+}
 
 /** Horizontal padding of `.reader-viewport`, which sits outside the iframe. */
 const VIEWPORT_PADDING_X = 48
@@ -57,7 +84,8 @@ export function clampFontSize(size: number): number {
  * iframe's own width.
  */
 export function readerMeasurePx(prefs: ReaderPreferences): number {
-  const text = prefs.columns * MEASURE_EM * prefs.fontSize
+  const measure = clampMeasure(prefs.measure)
+  const text = prefs.columns * measure * prefs.fontSize
   return text + (prefs.columns - 1) * columnGapFor(prefs.columns) + 2 * VIEWPORT_PADDING_X
 }
 

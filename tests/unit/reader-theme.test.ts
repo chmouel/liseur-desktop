@@ -7,9 +7,19 @@ import {
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
   DEFAULT_FONT_SIZE,
+  clampMeasure,
+  marginPresetFor,
+  DEFAULT_MEASURE,
+  MARGIN_PRESETS,
+  MIN_MEASURE,
+  MAX_MEASURE,
 } from '../../src/renderer/reader/reader-theme'
 
-const prefs = (columns: 1 | 2, fontSize = 18) => ({ columns, fontSize })
+const prefs = (columns: 1 | 2, fontSize = 18, measure = DEFAULT_MEASURE) => ({
+  columns,
+  fontSize,
+  measure,
+})
 
 describe('clampFontSize', () => {
   it('keeps sizes within the readable bounds', () => {
@@ -83,5 +93,35 @@ describe('buildReaderCss', () => {
     const css = buildReaderCss(prefs(1), 1000)
     expect(css).toContain('a[href]')
     expect(css).not.toMatch(/^\s*a \{/m)
+  })
+})
+
+describe('margins', () => {
+  it('keeps a custom width within readable bounds', () => {
+    expect(clampMeasure(MIN_MEASURE - 10)).toBe(MIN_MEASURE)
+    expect(clampMeasure(MAX_MEASURE + 10)).toBe(MAX_MEASURE)
+    expect(clampMeasure(Number.NaN)).toBe(DEFAULT_MEASURE)
+    expect(clampMeasure(33.4)).toBe(33)
+  })
+
+  it('names the preset a width matches, and nothing for a custom one', () => {
+    expect(marginPresetFor(MARGIN_PRESETS.narrow)).toBe('narrow')
+    expect(marginPresetFor(MARGIN_PRESETS.normal)).toBe('normal')
+    expect(marginPresetFor(MARGIN_PRESETS.wide)).toBe('wide')
+    expect(marginPresetFor(MARGIN_PRESETS.normal + 1)).toBeUndefined()
+  })
+
+  it('wider margins leave the text less room', () => {
+    // The whole point of the control: "wide" has to mean more white space,
+    // which is a narrower page, not a wider one.
+    const wide = readerMeasurePx(prefs(1, 18, MARGIN_PRESETS.wide))
+    const normal = readerMeasurePx(prefs(1, 18, MARGIN_PRESETS.normal))
+    const narrow = readerMeasurePx(prefs(1, 18, MARGIN_PRESETS.narrow))
+    expect(wide).toBeLessThan(normal)
+    expect(normal).toBeLessThan(narrow)
+  })
+
+  it('a stored width from another build cannot escape the bounds', () => {
+    expect(readerMeasurePx(prefs(1, 18, 999))).toBe(readerMeasurePx(prefs(1, 18, MAX_MEASURE)))
   })
 })

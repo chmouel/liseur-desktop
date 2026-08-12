@@ -46,7 +46,7 @@ test('reader preferences survive an application restart', async () => {
   await popover.getByRole('radio', { name: '2 columns' }).click()
   for (let i = 0; i < 3; i++)
     await popover.getByRole('button', { name: 'Increase font size' }).click()
-  await expect(popover.locator('.typography-value')).toHaveText('21')
+  await expect(popover.locator('[data-font-size]')).toHaveText('21')
   await expect
     .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).fontSize))
     .toBe('21px')
@@ -102,7 +102,7 @@ test('the font size goes well past 40px, and stops at the ceiling', async () => 
   await page.getByRole('button', { name: 'Typography' }).click()
   const popover = page.getByRole('dialog', { name: 'Typography' })
   const bigger = popover.getByRole('button', { name: 'Increase font size' })
-  const shown = async () => parseInt(await popover.locator('.typography-value').innerText(), 10)
+  const shown = async () => parseInt(await popover.locator('[data-font-size]').innerText(), 10)
 
   // The reader's size wins over the publisher's absolute one from the start.
   await expect.poll(renderedSize).toBe(await shown())
@@ -140,4 +140,57 @@ test('the font size goes well past 40px, and stops at the ceiling', async () => 
   await expect(smaller).toBeDisabled()
   expect(await shown()).toBe(10)
   await expect.poll(renderedSize).toBe(10)
+})
+
+test('margins can be set narrow, wide, or to a custom width, and are remembered', async () => {
+  test.setTimeout(60_000)
+  await app?.close()
+  ;({ app } = await launchApp(dataDir))
+  let page = await app.firstWindow()
+  await openBookByTitle(page, 'Reader Fixture')
+  let iframe = page.frameLocator('.reader-iframe')
+  await expect(iframe.locator('h1')).toHaveText('Chapter 1', { timeout: 10_000 })
+
+  await revealChrome(page)
+  await page.getByRole('button', { name: 'Typography' }).click()
+  let popover = page.getByRole('dialog', { name: 'Typography' })
+
+  // The page is what actually has to move: wider margins mean a narrower
+  // page, whatever the preference says it is.
+  const pageWidth = () => page.locator('.reader-viewport').evaluate((el) => el.clientWidth)
+  const atNormal = await pageWidth()
+
+  await popover.getByRole('radio', { name: 'wide margins' }).click()
+  await expect.poll(pageWidth).toBeLessThan(atNormal)
+
+  await popover.getByRole('radio', { name: 'narrow margins' }).click()
+  await expect.poll(pageWidth).toBeGreaterThan(atNormal)
+  const atNarrow = await pageWidth()
+
+  // A custom width steps off the presets, and none of them stays selected.
+  await popover.getByRole('button', { name: 'Decrease text width' }).click()
+  await expect.poll(pageWidth).toBeLessThan(atNarrow)
+  for (const name of ['narrow margins', 'normal margins', 'wide margins']) {
+    await expect(popover.getByRole('radio', { name })).toHaveAttribute('aria-checked', 'false')
+  }
+  const custom = await popover.locator('[data-measure]').getAttribute('data-measure')
+  expect(custom).toBe('44')
+
+  await page.keyboard.press('Escape')
+  await app.close()
+  app = undefined
+
+  // The custom width comes back, not the preset it was nudged from.
+  ;({ app } = await launchApp(dataDir))
+  page = await app.firstWindow()
+  await openBookByTitle(page, 'Reader Fixture')
+  iframe = page.frameLocator('.reader-iframe')
+  await expect(iframe.locator('h1')).toHaveText('Chapter 1', { timeout: 10_000 })
+  await revealChrome(page)
+  await page.getByRole('button', { name: 'Typography' }).click()
+  popover = page.getByRole('dialog', { name: 'Typography' })
+  await expect(popover.locator('[data-measure]')).toHaveAttribute('data-measure', '44')
+
+  // The text still paginates at a custom width — no spill, no blank page.
+  expect(await iframe.locator('body').evaluate((b) => b.scrollWidth >= b.clientWidth)).toBe(true)
 })

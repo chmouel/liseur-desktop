@@ -86,6 +86,13 @@ export type AppTheme = 'system' | 'light' | 'dark'
 export interface ReaderPreferences {
   fontSize: number
   columns: 1 | 2
+  /**
+   * Text measure in em: how wide a line of text may grow before the page
+   * stops it. This is what the margin control moves — wider margins are a
+   * narrower measure. Kept in em so the margins hold their proportions
+   * when the font size changes.
+   */
+  measure: number
 }
 
 export interface Settings {

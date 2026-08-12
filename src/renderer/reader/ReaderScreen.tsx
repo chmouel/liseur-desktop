@@ -15,7 +15,26 @@ import {
   type ReaderEngine,
   type SelectionAnchor,
 } from './engine'
-import { readerMeasurePx, clampFontSize, MIN_FONT_SIZE, MAX_FONT_SIZE } from './reader-theme'
+import {
+  readerMeasurePx,
+  clampFontSize,
+  clampMeasure,
+  marginPresetFor,
+  MARGIN_PRESETS,
+  MIN_FONT_SIZE,
+  MAX_FONT_SIZE,
+  MIN_MEASURE,
+  MAX_MEASURE,
+  type MarginPreset,
+} from './reader-theme'
+
+/** Margin presets in the order they read: most text to least. */
+const MARGIN_NAMES = ['narrow', 'normal', 'wide'] as const
+const MARGIN_LABELS: Record<MarginPreset, string> = {
+  narrow: 'Narrow',
+  normal: 'Normal',
+  wide: 'Wide',
+}
 import { computeRange } from '../library/virtualize'
 import { normalizeText } from './anchoring'
 
@@ -956,7 +975,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
             >
               A−
             </button>
-            <span class="typography-value" aria-live="polite">
+            <span class="typography-value" aria-live="polite" data-font-size={prefs().fontSize}>
               {prefs().fontSize}
             </span>
             <button
@@ -996,6 +1015,63 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
                 </button>
               ))}
             </div>
+          </div>
+          <div class="typography-row">
+            <span class="typography-label">Margins</span>
+            <div
+              role="radiogroup"
+              aria-label="Margins"
+              onKeyDown={(e) =>
+                radioGroupKeydown(
+                  e,
+                  MARGIN_NAMES,
+                  marginPresetFor(prefs().measure) ?? 'normal',
+                  (name) => applyPrefs({ measure: MARGIN_PRESETS[name as MarginPreset] }),
+                )
+              }
+            >
+              {MARGIN_NAMES.map((name) => (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={marginPresetFor(prefs().measure) === name}
+                  class="margin-choice"
+                  classList={{ active: marginPresetFor(prefs().measure) === name }}
+                  aria-label={`${name} margins`}
+                  data-value={name}
+                  tabIndex={marginPresetFor(prefs().measure) === name ? 0 : -1}
+                  onClick={() => applyPrefs({ measure: MARGIN_PRESETS[name] })}
+                >
+                  {MARGIN_LABELS[name]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div class="typography-row">
+            {/* The stepper is the "custom" of narrow/normal/wide: it moves
+                the measure off the presets, and none of them stays lit. */}
+            <span class="typography-label">Text width</span>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label="Decrease text width"
+              disabled={prefs().measure <= MIN_MEASURE}
+              onClick={() => applyPrefs({ measure: clampMeasure(prefs().measure - 2) })}
+            >
+              −
+            </button>
+            <span class="typography-value" aria-live="polite" data-measure={prefs().measure}>
+              {prefs().measure}em
+            </span>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label="Increase text width"
+              disabled={prefs().measure >= MAX_MEASURE}
+              onClick={() => applyPrefs({ measure: clampMeasure(prefs().measure + 2) })}
+            >
+              +
+            </button>
           </div>
         </div>
       </Show>

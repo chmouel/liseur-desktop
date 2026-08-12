@@ -66,7 +66,7 @@
   top: 48px;
   right: 16px;
   z-index: 25;
-  width: 280px;
+  width: 300px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -90,12 +90,13 @@
 }
 
 .typography-value {
-  min-width: 2ch;
+  min-width: 4ch;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-.columns-choice {
+.columns-choice,
+.margin-choice {
   border: 1px solid var(--border);
   background: none;
   color: var(--text);
@@ -106,9 +107,16 @@
   font: inherit;
 }
 
-.columns-choice.active {
+.columns-choice.active,
+.margin-choice.active {
   border-color: var(--focus);
   background: var(--bg-sunken);
+}
+
+/* Named margins need words, not glyphs, so they get room to say them. */
+.margin-choice {
+  font-size: 12px;
+  padding: 4px 8px;
 }
 
 .toc-wrapper {

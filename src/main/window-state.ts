@@ -2,6 +2,7 @@ import { nativeTheme, type BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from './paths'
+import type { ReaderPreferences } from '../shared/domain/types'
 
 /**
  * Tiny synchronous JSON persistence for window bounds and app settings.
@@ -23,7 +24,9 @@ interface PersistedState {
   window?: Partial<WindowState>
   settings?: {
     theme?: 'system' | 'light' | 'dark'
-    reader?: { fontSize: number; columns: 1 | 2 } | undefined
+    // Structural duplication drifted once already: reuse the shared type
+    // so a new preference cannot be silently dropped on the way to disk.
+    reader?: ReaderPreferences | undefined
   }
 }
 
