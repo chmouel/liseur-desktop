@@ -3,7 +3,7 @@ import type { LibraryFilter, LibrarySortKey } from '@shared/domain/types'
 import { useLibraryStore } from './store'
 import { VirtualBookGrid } from './VirtualBookGrid'
 import { ContinueReading } from './ContinueReading'
-import { SettingsScreen } from '../settings/SettingsScreen'
+import { openSettings, settingsOpen } from '../settings/state'
 import { StatsScreen } from '../stats/StatsScreen'
 import { useTheme } from '../app/theme'
 import { computeColumns, GRID_CARD_WIDTH, GRID_GAP, GRID_ROW_HEIGHT } from './virtualize'
@@ -26,7 +26,6 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
 
   const [searchOpen, setSearchOpen] = createSignal(false)
   const [selectedIndex, setSelectedIndex] = createSignal(-1)
-  const [settingsOpen, setSettingsOpen] = createSignal(false)
   const [statsOpen, setStatsOpen] = createSignal(false)
   const [sortMenuOpen, setSortMenuOpen] = createSignal(false)
   const [helpOpen, setHelpOpen] = createSignal(false)
@@ -88,10 +87,9 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       }
       return
     }
-    if (settingsOpen()) {
-      if (e.key === 'Escape' || (vimMode() && e.key === 'q')) setSettingsOpen(false)
-      return
-    }
+    // The settings panel is the application's, not the shelf's, and it
+    // handles its own keys — including the ones that close it.
+    if (settingsOpen()) return
     if (statsOpen()) {
       if (e.key === 'Escape' || (vimMode() && e.key === 'q')) setStatsOpen(false)
       return
@@ -244,7 +242,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         setStatsOpen(true)
         break
       case 'settings':
-        setSettingsOpen(true)
+        openSettings()
         break
       case 'help':
         setHelpOpen(true)
@@ -265,11 +263,11 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
     props.onOpenBook(book.id)
   }
 
-  // Menu accelerators from main (Ctrl/Cmd+F, Ctrl/Cmd+,).
-  window.liseur.app.onMenu((action) => {
-    if (action === 'search') openSearch()
-    if (action === 'settings') setSettingsOpen(true)
-  })
+  // Ctrl/Cmd+F searches whatever is on screen, so each screen claims it for
+  // itself; settings are the application's and are handled in the shell.
+  // Unsubscribing matters: this screen is mounted again every time a book is
+  // closed, and the listeners would otherwise pile up.
+  onCleanup(window.liseur.app.onMenu((action) => action === 'search' && openSearch()))
 
   // Document-level key handling: Solid delegates element handlers, and keys
   // targeted at <body> (e.g. after a form closes) never pass through the
@@ -373,16 +371,12 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
             class="icon-button"
             aria-label="Settings"
             title="Settings (Ctrl/Cmd+,)"
-            onClick={() => setSettingsOpen(true)}
+            onClick={openSettings}
           >
             ⋮
           </button>
         </div>
       </header>
-
-      <Show when={settingsOpen()}>
-        <SettingsScreen onClose={() => setSettingsOpen(false)} />
-      </Show>
 
       <Show when={statsOpen()}>
         <StatsScreen onClose={() => setStatsOpen(false)} />

@@ -53,7 +53,8 @@ gh attestation verify <file> --repo chmouel/liseur-desktop
 
 There isn't one, until you ask: press Alt and it appears. Everything in it
 has a shortcut anyway — `Ctrl+O` to open a book, `Ctrl+Shift+O` to add a
-folder, `Ctrl+,` for the settings, `Ctrl+F` to search. On macOS the menu
+folder, `Ctrl+,` for the settings, `Ctrl+F` to search the shelf or the book you
+are in. On macOS the menu
 lives in the system bar as usual.
 
 ## Vim mode

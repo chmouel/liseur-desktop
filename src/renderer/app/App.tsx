@@ -1,8 +1,10 @@
-import { createSignal, onMount, Show, type JSX } from 'solid-js'
+import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import { initTheme } from './theme'
 import { initLibrary, useLibraryStore } from '../library/store'
 import { LibraryScreen } from '../library/LibraryScreen'
 import { ReaderScreen } from '../reader/ReaderScreen'
+import { SettingsScreen } from '../settings/SettingsScreen'
+import { closeSettings, openSettings, settingsOpen } from '../settings/state'
 import { initVimMode } from '../vim/vim'
 import { observeLongTasks, perf } from '../perf/perf'
 
@@ -55,23 +57,32 @@ export function App(): JSX.Element {
     initVimMode()
     observeLongTasks()
     watchForNewServerBooks()
+    // Settings belong to the application, not to the shelf: Ctrl+, has to
+    // answer while a book is open too.
+    onCleanup(window.liseur.app.onMenu((action) => action === 'settings' && openSettings()))
     void maybeResumeLastBook(setOpenBookId)
     done()
   })
 
   return (
-    <Show when={openBookId()} fallback={<LibraryScreen onOpenBook={(id) => setOpenBookId(id)} />}>
-      {(bookId) => (
-        <ReaderScreen
-          bookId={bookId()}
-          onClose={() => {
-            setOpenBookId(null)
-            // Progress changed while reading: refresh what the user sees.
-            void library.refresh()
-            void library.refreshContinueReading()
-          }}
-        />
-      )}
-    </Show>
+    <>
+      <Show when={openBookId()} fallback={<LibraryScreen onOpenBook={(id) => setOpenBookId(id)} />}>
+        {(bookId) => (
+          <ReaderScreen
+            bookId={bookId()}
+            onClose={() => {
+              setOpenBookId(null)
+              // Progress changed while reading: refresh what the user sees.
+              void library.refresh()
+              void library.refreshContinueReading()
+            }}
+          />
+        )}
+      </Show>
+      {/* Above whichever screen is showing, so it opens over a book too. */}
+      <Show when={settingsOpen()}>
+        <SettingsScreen onClose={closeSettings} />
+      </Show>
+    </>
   )
 }

@@ -28,6 +28,7 @@ import {
   MAX_MEASURE,
   type MarginPreset,
 } from './reader-theme'
+import { settingsOpen } from '../settings/state'
 
 /** Margin presets in the order they read: most text to least. */
 const MARGIN_NAMES = ['narrow', 'normal', 'wide'] as const
@@ -683,6 +684,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   function onKeydown(e: ForwardedKeyEvent): void {
     // Any key press reveals the chrome (hidden-reading mode is pointer- AND
     // keyboard-dismissable).
+    // The settings panel opens over the book. While it is up it owns the
+    // keyboard: turning pages or closing the book underneath it is never
+    // what the keystroke was for.
+    if (settingsOpen()) return
+
     showChrome()
 
     if (helpOpen()) {
@@ -934,6 +940,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
       }
     })()
   }
+
+  // Ctrl/Cmd+F means "search what I am looking at", and what you are looking
+  // at here is a book. The shelf claims the same accelerator while it is the
+  // one on screen; only one of the two is ever mounted.
+  onCleanup(window.liseur.app.onMenu((action) => action === 'search' && togglePopover('search')))
 
   // Key handling at document level: clicks land on iframes/zones and must
   // not swallow page turns. One listener only (registered here, not on the

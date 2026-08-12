@@ -39,7 +39,8 @@ export function setupMenu(): void {
       label: 'View',
       submenu: [
         {
-          label: 'Search Library',
+          // The shelf or the book, whichever is on screen.
+          label: 'Search',
           accelerator: 'CmdOrCtrl+F',
           click: () => send('liseur:menu:search'),
         },

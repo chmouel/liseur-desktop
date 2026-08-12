@@ -45,7 +45,24 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
     }
   }
 
+  // The panel owns the keyboard while it is up, whatever is behind it. Both
+  // screens listen for keys on the document, and a page must not turn — nor a
+  // book close — under an open settings panel. Escape closes it from inside a
+  // field too, which a ticked checkbox used to make impossible.
+  function onKeydown(e: KeyboardEvent): void {
+    const target = e.target as HTMLElement | null
+    const inField =
+      target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
+    if (e.key === 'Escape' || (vimMode() && e.key === 'q' && !inField)) {
+      e.preventDefault()
+      e.stopPropagation()
+      props.onClose()
+    }
+  }
+
   onMount(() => {
+    document.addEventListener('keydown', onKeydown)
+    onCleanup(() => document.removeEventListener('keydown', onKeydown))
     void refresh()
     const off = window.liseur.sync.onStateChanged((s) => setState(s))
     onCleanup(off)
@@ -154,18 +171,7 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
   }
 
   return (
-    <div
-      class="settings-overlay"
-      role="dialog"
-      aria-label="Settings"
-      // Escape closes the panel from inside it too. The library's key
-      // handler deliberately keeps its hands off anything focused in a
-      // field, which used to leave a ticked checkbox holding the keyboard
-      // with no way out but the mouse.
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') props.onClose()
-      }}
-    >
+    <div class="settings-overlay" role="dialog" aria-label="Settings">
       <div class="settings-panel">
         <header class="settings-header">
           <h1>Settings</h1>

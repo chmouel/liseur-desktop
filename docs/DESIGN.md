@@ -44,6 +44,11 @@ Library UX conventions carried over from Android:
 - Continue Reading card: cover + label + title + author + progress bar + percent
 - Book card: cover + badges (download/server/finished) + title + author
 
+The settings panel belongs to the application shell rather than to the
+library, and paints over whichever screen is showing. Anything scoped to one
+screen — the shelf's search, the reader's panels — stays with that screen and
+claims the menu accelerator only while it is mounted.
+
 ## Vim mode
 
 An optional keyboard grammar for people who already have one in their
