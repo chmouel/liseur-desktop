@@ -42,15 +42,45 @@ export function makeOpId(deviceId: string, workId: string, updatedAt: number): s
     .slice(0, 32)
 }
 
+/** What the server knows about reading done on every device, not just this one. */
+export interface InsightsSummary {
+  rangeDays: number
+  totalMs: number
+  sessions: number
+  streakDays: number
+}
+
+/** One book's lifetime total, as every device together has read it. */
+export interface WorkInsights {
+  sessions: number
+  totalMs: number
+  lastReadAt?: number
+}
+
+/** Minutes arrive as numbers the server computed; a NaN is worth nothing. */
+function numberOrZero(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
 export class LiseurSyncCatalog implements RemoteCatalog {
   private readonly http: Http
+  /**
+   * Statistics are read with their own narrower credential, because the
+   * server refuses them to a sync token on purpose. Without one, every
+   * insights call here answers null and the screen keeps its local figures.
+   */
+  private readonly insightsHttp: Http | null
 
   constructor(
     readonly server: RemoteServer,
     authHeaders: Record<string, string>,
     fetchImpl?: ConstructorParameters<typeof Http>[2],
+    insightsToken?: string,
   ) {
     this.http = new Http(server.url, authHeaders, fetchImpl)
+    this.insightsHttp = insightsToken
+      ? new Http(server.url, { authorization: `Bearer ${insightsToken}` }, fetchImpl)
+      : null
   }
 
   async testConnection(): Promise<TestResult> {
@@ -184,6 +214,82 @@ export class LiseurSyncCatalog implements RemoteCatalog {
   }
 
   /**
+   * The server's own count of reading done, across every device signed in.
+   * This machine only knows what was read on it; the phone's mornings are
+   * only in the server's figures.
+   *
+   * A summary with nothing in it is treated as no answer: a server that has
+   * never been told about this reader should not blank out figures this
+   * machine can prove.
+   */
+  async fetchInsightsSummary(rangeDays = 30): Promise<InsightsSummary | null> {
+    if (!this.insightsHttp) return null
+    const res = await this.insightsHttp.getJson<{
+      range_days?: number
+      total_active_minutes?: number
+      sessions?: number
+      streak_days?: number
+    }>(`/v1/insights/summary?range=${rangeDays}d`)
+    if (!res.ok || !res.value) return null
+    const minutes = numberOrZero(res.value.total_active_minutes)
+    const sessions = res.value.sessions ?? 0
+    if (minutes <= 0 && sessions <= 0) return null
+    return {
+      rangeDays: res.value.range_days ?? rangeDays,
+      totalMs: Math.round(minutes * 60_000),
+      sessions,
+      streakDays: res.value.streak_days ?? 0,
+    }
+  }
+
+  /**
+   * Minutes per calendar day, in the timezone the server keeps for this
+   * reader. Days outside `from`..`to` are dropped; days inside it that the
+   * server does not mention were simply not read on.
+   */
+  async fetchInsightsCalendar(from: string, to: string): Promise<Map<string, number> | null> {
+    if (!this.insightsHttp) return null
+    const years = new Set([from.slice(0, 4), to.slice(0, 4)])
+    const byDay = new Map<string, number>()
+    for (const year of years) {
+      const res = await this.insightsHttp.getJson<{
+        days?: Array<{ date?: string; minutes?: number }>
+      }>(`/v1/insights/calendar?year=${encodeURIComponent(year)}`)
+      if (!res.ok || !res.value) return null
+      for (const day of res.value.days ?? []) {
+        if (!day.date || day.date < from || day.date > to) continue
+        byDay.set(day.date, Math.round(numberOrZero(day.minutes) * 60_000))
+      }
+    }
+    return byDay
+  }
+
+  /** Lifetime per-book totals, keyed by the server's work id. */
+  async fetchInsightsWorks(): Promise<Map<string, WorkInsights> | null> {
+    if (!this.insightsHttp) return null
+    const res = await this.insightsHttp.getJson<{
+      works?: Array<{
+        work_id?: string
+        sessions?: number
+        total_active_minutes?: number
+        last_read_at?: string
+      }>
+    }>('/v1/insights/works')
+    if (!res.ok || !res.value) return null
+    const byWork = new Map<string, WorkInsights>()
+    for (const work of res.value.works ?? []) {
+      if (!work.work_id) continue
+      const lastReadAt = work.last_read_at ? Date.parse(work.last_read_at) : Number.NaN
+      byWork.set(work.work_id, {
+        sessions: work.sessions ?? 0,
+        totalMs: Math.round(numberOrZero(work.total_active_minutes) * 60_000),
+        ...(Number.isFinite(lastReadAt) ? { lastReadAt } : {}),
+      })
+    }
+    return byWork
+  }
+
+  /**
    * Catch-up pull of changes since a cursor. Returns the new cursor
    * (high_water) and changed work ids; 410 means the cursor is too old and
    * the caller must resync from heads.
@@ -222,7 +328,7 @@ export async function liseurSyncLogin(
   username: string,
   password: string,
   fetchImpl?: ConstructorParameters<typeof Http>[2],
-): Promise<{ ok: true; token: string } | { ok: false; detail: string }> {
+): Promise<{ ok: true; token: string; insightsToken?: string } | { ok: false; detail: string }> {
   const http = new Http(serverUrl, {}, fetchImpl)
   const login = await http.request('POST', '/v1/login', {
     body: JSON.stringify({ username, password }),
@@ -234,11 +340,12 @@ export async function liseurSyncLogin(
     return { ok: false, detail: 'sign-in answered without a credential' }
   }
 
-  const mint = await new Http(
+  const mintWith = new Http(
     serverUrl,
     { authorization: `Bearer ${session.auth_token}` },
     fetchImpl,
-  ).request('POST', '/v1/tokens', {
+  )
+  const mint = await mintWith.request('POST', '/v1/tokens', {
     body: JSON.stringify({ name: 'liseur-desktop', scope: 'sync' }),
     headers: { 'content-type': 'application/json' },
   })
@@ -248,7 +355,27 @@ export async function liseurSyncLogin(
   // an older server is not left stranded.
   const data = await mint.value.json<{ secret?: string; token?: string }>()
   const token = data.secret ?? data.token
-  return token ? { ok: true, token } : { ok: false, detail: 'device token came back empty' }
+  if (!token) return { ok: false, detail: 'device token came back empty' }
+
+  // A second, narrower credential for reading statistics. The sync token is
+  // refused by those routes on purpose, and a server that will not grant the
+  // scope still syncs positions perfectly well, so a refusal here is stepped
+  // over rather than failing the whole setup.
+  let insightsToken: string | undefined
+  try {
+    const stats = await mintWith.request('POST', '/v1/tokens', {
+      body: JSON.stringify({ name: 'liseur-desktop (statistics)', scope: 'read-insights' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    if (stats.ok && stats.value) {
+      const minted = await stats.value.json<{ secret?: string; token?: string }>()
+      insightsToken = minted.secret ?? minted.token
+    }
+  } catch {
+    // No statistics token; positions still sync.
+  }
+
+  return { ok: true, token, ...(insightsToken ? { insightsToken } : {}) }
 }
 
 /** Turns a refused request into something worth showing a person. */

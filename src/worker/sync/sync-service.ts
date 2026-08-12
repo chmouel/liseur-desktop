@@ -10,7 +10,12 @@ import { storeCoverBytes } from '../library/cover-cache'
 import { reconcileProgress, withSaneTimestamp, type ReconcileAction } from './reconcile'
 import { KomgaCatalog } from './komga'
 import { CalibreCatalog, provisionKoboToken } from './calibre'
-import { LiseurSyncCatalog, liseurSyncLogin } from './liseur-sync'
+import {
+  LiseurSyncCatalog,
+  liseurSyncLogin,
+  type InsightsSummary,
+  type WorkInsights,
+} from './liseur-sync'
 import { SyncRepository } from './sync-repository'
 import type { FetchLike } from './http'
 import type { ProgressRecord, RemoteBook, RemoteCatalog, RemoteServer, TestResult } from './types'
@@ -61,6 +66,15 @@ export interface SyncDeps {
 interface ServerCredentials {
   headers: Record<string, string>
   extra?: Record<string, string> | undefined
+}
+
+/** Everything the server can add to this machine's own reading figures. */
+export interface ServerInsights {
+  summary: InsightsSummary | null
+  /** Milliseconds per YYYY-MM-DD, in the server's timezone for this reader. */
+  calendar: Map<string, number> | null
+  /** Lifetime totals keyed by *local* book id, already matched up. */
+  books: Map<string, WorkInsights> | null
 }
 
 export class SyncService {
@@ -147,7 +161,12 @@ export class SyncService {
               credentials.extra?.['koboToken'],
               this.deps.fetchImpl,
             )
-          : new LiseurSyncCatalog(server, credentials.headers, this.deps.fetchImpl)
+          : new LiseurSyncCatalog(
+              server,
+              credentials.headers,
+              this.deps.fetchImpl,
+              credentials.extra?.['insightsToken'],
+            )
     this.catalogs.set(serverId, catalog)
     return catalog
   }
@@ -200,6 +219,9 @@ export class SyncService {
             this.repository.removeServer(server.id)
             return { server: this.serverInfo(server), test: { ok: false, detail: login.detail } }
           }
+          // The statistics scope is deliberately separate on the server, so
+          // a token that may sync cannot read a reader's history.
+          if (login.insightsToken) extra = { insightsToken: login.insightsToken }
           headers = { authorization: `Bearer ${login.token}` }
           break
         }
@@ -373,6 +395,49 @@ export class SyncService {
    */
   trackSessions(sessions: ReadingSessionRepository): void {
     this.sessions = sessions
+  }
+
+  /**
+   * What a sync server counts as read, across every device: the headline
+   * total, the calendar behind the week chart, and each book's lifetime
+   * total. Returns nothing when no such server is configured or it cannot
+   * be reached, which is the normal case rather than an error: the
+   * statistics screen then shows what this machine recorded.
+   */
+  async serverInsights(from: string, to: string): Promise<ServerInsights | null> {
+    for (const server of this.repository.listServers()) {
+      if (server.type !== 'liseur-sync') continue
+      const catalog = this.catalogFor(server.id)
+      if (!(catalog instanceof LiseurSyncCatalog)) continue
+      try {
+        // Three questions, one round trip's worth of waiting: the screen is
+        // already showing this machine's figures while these are in flight.
+        const [summary, calendar, works] = await Promise.all([
+          catalog.fetchInsightsSummary(),
+          catalog.fetchInsightsCalendar(from, to),
+          catalog.fetchInsightsWorks(),
+        ])
+        if (!summary && !calendar && !works) continue
+        // Only books this server knows by name can be matched to its
+        // figures; anything else stays as this machine recorded it.
+        const byBook = new Map<string, WorkInsights>()
+        if (works) {
+          for (const link of this.trackedBooks(server.id)) {
+            const insight = works.get(link.remoteId)
+            if (insight) byBook.set(link.bookId, insight)
+          }
+        }
+        return {
+          summary,
+          calendar,
+          books: works ? byBook : null,
+        }
+      } catch (err) {
+        // Statistics are never worth failing over: the local figures stand.
+        this.log(`insights: ${(err as Error).message}`)
+      }
+    }
+    return null
   }
 
   /**
@@ -1057,7 +1122,11 @@ export class SyncService {
   }
 
   private serverInfo(server: RemoteServer): ServerInfo {
-    return { ...server, hasCredentials: this.credentials.has(server.id) }
+    return {
+      ...server,
+      hasCredentials: this.credentials.has(server.id),
+      sharesStats: this.credentials.get(server.id)?.extra?.['insightsToken'] !== undefined,
+    }
   }
 
   private emitState(): void {

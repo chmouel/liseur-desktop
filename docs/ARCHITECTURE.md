@@ -205,6 +205,29 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   test connection, sync now, conflict list. The library grid shows a ☁
   badge on server books.
 
+### Reading statistics
+
+- `worker/library/reading-stats.ts` — pure arithmetic over
+  `reading_sessions`: per-day buckets (a sitting crossing midnight is split
+  across both local days, as the server does), streaks that still count when
+  the last day read was yesterday, per-book totals, and the seven-day chart.
+  `ReadingStatsRepository` supplies the rows; `mergeServerStats` folds in a
+  server's figures.
+- Aggregation matches the Android app: a liseur-sync server counts the same
+  reading seen from every device, so where it answers it *replaces* the
+  local figure rather than being added to it (adding would count this
+  machine twice). `/v1/insights/summary` gives the headline total, sittings
+  and streak; `/v1/insights/calendar` the week chart; `/v1/insights/works`
+  each book's lifetime total, matched to local books through the same
+  work-id links used for position sync. Any part the server does not answer
+  keeps its local value; every failure is silent, because a statistics
+  screen is not worth an error banner.
+- Those routes require the server's separate `read-insights` scope, which a
+  `sync` token is refused. Setup mints both tokens and stores the second as
+  `extra.insightsToken`; a server that will not grant it still syncs
+  positions, and the settings row says the totals stay local.
+- UI: `renderer/stats/StatsScreen.tsx`, opened from the library header.
+
 > Note: Electron 43 utilityProcess children expose `process.parentPort`
 > (the `parentPort` export of the `electron` module was removed). The Node
 > side builds as CJS for this reason — utilityProcess entries cannot be ESM.

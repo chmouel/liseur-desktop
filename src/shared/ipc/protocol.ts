@@ -30,6 +30,12 @@ export interface ServerInfo {
   addedAt: number
   lastSyncAt?: number | undefined
   hasCredentials: boolean
+  /**
+   * Whether this server granted the separate credential that reads reading
+   * statistics. Without it the figures on the statistics screen are only
+   * what this computer recorded.
+   */
+  sharesStats?: boolean
 }
 
 export interface SyncConflictInfo {
@@ -43,6 +49,45 @@ export interface SyncConflictInfo {
   remoteProgression?: number | undefined
   remoteUpdatedAt: number
   detectedAt: number
+}
+
+/** One day of the statistics screen's week chart. */
+export interface ReadingStatsDay {
+  /** Local calendar day, YYYY-MM-DD. */
+  date: string
+  /** Short weekday name, for the label under the bar. */
+  weekday: string
+  ms: number
+  today: boolean
+}
+
+export interface ReadingStatsBook {
+  bookId: string
+  title: string
+  author?: string
+  ms: number
+  sittings: number
+  lastReadAt: number
+  finished: boolean
+  progression?: number
+}
+
+export interface ReadingStats {
+  totalMs: number
+  sittings: number
+  booksReadFrom: number
+  booksFinished: number
+  streakDays: number
+  week: ReadingStatsDay[]
+  books: ReadingStatsBook[]
+  /**
+   * Where the headline figures come from. A sync server counts reading done
+   * on every device, so its total beats the one this machine can see; the
+   * screen says which it is showing rather than leaving it ambiguous.
+   */
+  source: 'local' | 'server'
+  /** Days the server's figures cover. Absent when they are this machine's. */
+  rangeDays?: number
 }
 
 export interface SyncState {
@@ -116,6 +161,7 @@ export type WorkerRequest =
    */
   | { kind: 'sync.ensureCover'; id: number; bookId: string }
   | { kind: 'sync.getState'; id: number }
+  | { kind: 'stats.get'; id: number }
   | {
       kind: 'sync.resolveConflict'
       id: number
@@ -147,6 +193,7 @@ export type WorkerResponse =
   | { kind: 'sync.refreshStale.result'; id: number }
   | { kind: 'sync.download.result'; id: number; book: Book | null }
   | { kind: 'sync.getState.result'; id: number; state: SyncState }
+  | { kind: 'stats.get.result'; id: number; stats: ReadingStats }
   | { kind: 'sync.resolveConflict.result'; id: number }
   | { kind: 'pong'; id: number }
   | { kind: 'error'; id: number; message: string }

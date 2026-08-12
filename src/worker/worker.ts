@@ -1,6 +1,11 @@
 import { type MessagePortMain } from 'electron'
 import { join } from 'node:path'
-import type { MainToWorkerMessage, WorkerMessage, WorkerRequest } from '../shared/ipc/protocol'
+import type {
+  MainToWorkerMessage,
+  ReadingStats,
+  WorkerMessage,
+  WorkerRequest,
+} from '../shared/ipc/protocol'
 import { openDatabase, migrate } from './db/database'
 import { MIGRATIONS } from './db/migrations'
 import { LibraryService } from './library/library-service'
@@ -9,6 +14,7 @@ import { BookOpener } from './library/open-book'
 import { AnnotationRepository } from './library/annotation-repository'
 import { BookSearchService } from './library/book-search'
 import { ReadingSessionRepository } from './library/reading-sessions'
+import { ReadingStatsRepository, mergeServerStats } from './library/reading-stats'
 import { SyncService } from './sync/sync-service'
 import { seedLibraryIfEmpty } from './library/seed'
 
@@ -35,6 +41,7 @@ function initLibrary(): {
   ingestion: IngestionService
   opener: BookOpener
   sessions: ReadingSessionRepository
+  stats: ReadingStatsRepository
   annotations: AnnotationRepository
   search: BookSearchService
   sync: SyncService
@@ -74,13 +81,30 @@ function initLibrary(): {
     ingestion,
     opener,
     sessions,
+    stats: new ReadingStatsRepository(db),
     annotations: new AnnotationRepository(db),
     search: new BookSearchService(db),
     sync,
   }
 }
 
-const { library, ingestion, opener, annotations, search, sync, sessions } = initLibrary()
+const { library, ingestion, opener, annotations, search, sync, sessions, stats } = initLibrary()
+
+/**
+ * Reading figures for the statistics screen. This machine's own records are
+ * the base, so the screen works with no server and appears instantly; a sync
+ * server, when there is one, folds in the reading done on every other
+ * device, the same aggregation the phone does, so the two agree.
+ */
+async function readingStats(): Promise<ReadingStats> {
+  const local = stats.stats()
+  const first = local.week[0]?.date
+  const last = local.week.at(-1)?.date
+  if (!first || !last) return local
+  const server = await sync.serverInsights(first, last)
+  if (!server) return local
+  return mergeServerStats(local, stats.library(), server)
+}
 
 /** process.parentPort kept in a variable for the sync secret forwarding. */
 const parentPortRef = (
@@ -277,6 +301,13 @@ function handleRequest(port: MessagePortMain, request: WorkerRequest): void {
       break
     case 'sync.getState':
       send(port, { kind: 'sync.getState.result', id: request.id, state: sync.state() })
+      break
+    case 'stats.get':
+      void readingStats()
+        .then((figures) =>
+          send(port, { kind: 'stats.get.result', id: request.id, stats: figures }),
+        )
+        .catch((err: Error) => send(port, { kind: 'error', id: request.id, message: err.message }))
       break
     case 'sync.resolveConflict':
       void sync

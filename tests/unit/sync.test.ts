@@ -11,6 +11,10 @@ import { KomgaCatalog } from '../../src/worker/sync/komga'
 import { SyncRepository } from '../../src/worker/sync/sync-repository'
 import { BookRepository } from '../../src/worker/library/book-repository'
 import { ReadingSessionRepository } from '../../src/worker/library/reading-sessions'
+import {
+  ReadingStatsRepository,
+  mergeServerStats,
+} from '../../src/worker/library/reading-stats'
 import { SyncService } from '../../src/worker/sync/sync-service'
 import type { FetchLike } from '../../src/worker/sync/http'
 import { jsonResponse, mockKomga } from './sync-mocks'
@@ -894,13 +898,14 @@ describe('SyncService against mock Komga', () => {
         if (headers['authorization'] !== 'Bearer login-secret') {
           return jsonResponse({ error: 'invalid auth credential' }, 401)
         }
+        const asked = JSON.parse(String(init?.body ?? '{}')) as { scope?: string }
         return jsonResponse(
           {
             token_id: 't1',
             device_id: 'd1',
             name: 'liseur-desktop',
-            scope: 'sync',
-            secret: 'device-secret',
+            scope: asked.scope,
+            secret: asked.scope === 'read-insights' ? 'stats-secret' : 'device-secret',
           },
           201,
         )
@@ -923,9 +928,16 @@ describe('SyncService against mock Komga', () => {
     expect(requests.map((r) => r.path)).toEqual([
       '/sync/v1/login',
       '/sync/v1/tokens',
+      '/sync/v1/tokens',
       '/sync/v1/changes',
     ])
     expect(requests[1]?.body).toEqual({ name: 'liseur-desktop', scope: 'sync' })
+    // The statistics routes refuse a sync token by design, so setup asks for
+    // the narrower second credential too.
+    expect(requests[2]?.body).toEqual({
+      name: 'liseur-desktop (statistics)',
+      scope: 'read-insights',
+    })
     // The device secret, not the hour-long login credential.
     expect(Object.values(secrets)[0]?.['authorization']).toBe('Bearer device-secret')
   })
@@ -994,6 +1006,120 @@ describe('SyncService against mock Komga', () => {
     // Sent once: the next sync has nothing left to say.
     await service.syncNow(server.id)
     expect(posted).toHaveLength(1)
+  })
+
+  it('adds up reading from every device, not just this one', async () => {
+    // The whole point of the statistics screen against a server: a book read
+    // mostly on the phone should show the phone's hours here too. The server
+    // counts this computer's sessions as well, so its figure replaces the
+    // local one rather than being added to it.
+    const asked: string[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const u = new URL(url)
+      const path = u.pathname
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      if (path === '/v1/login') return jsonResponse({ auth_token: 'x', expires_in: 3600 })
+      if (path === '/v1/tokens') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { scope?: string }
+        return jsonResponse(
+          { token_id: 't', device_id: 'd', secret: `secret-for-${body.scope ?? ''}` },
+          201,
+        )
+      }
+      if (path === '/v1/changes') return jsonResponse({ ops: [], high_water: '0' })
+      if (path.endsWith('/positions')) return jsonResponse({ ops: [] })
+      if (path.startsWith('/v1/insights/')) {
+        asked.push(path)
+        // The statistics scope is a separate credential; the sync one must
+        // not be accepted here, exactly as the server behaves.
+        if (headers['authorization'] !== 'Bearer secret-for-read-insights') {
+          return jsonResponse({ error: 'insufficient scope' }, 403)
+        }
+        if (path === '/v1/insights/summary') {
+          return jsonResponse({
+            range_days: 30,
+            total_active_minutes: 600,
+            sessions: 42,
+            streak_days: 9,
+          })
+        }
+        if (path === '/v1/insights/works') {
+          return jsonResponse({
+            works: [
+              {
+                work_id: 'work-1',
+                sessions: 20,
+                total_active_minutes: 300,
+                last_read_at: new Date().toISOString(),
+              },
+            ],
+          })
+        }
+        if (path === '/v1/insights/calendar') {
+          const today = new Date()
+          const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+          return jsonResponse({ year: today.getFullYear(), days: [{ date, minutes: 120 }] })
+        }
+      }
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Sync',
+      url: 'http://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+
+    const books = new BookRepository(db)
+    books.insertBooks([
+      {
+        id: 'local-1',
+        title: 'Guidebook',
+        authors: ['A. Writer'],
+        finished: false,
+        archived: false,
+        downloaded: true,
+        addedAt: Date.now(),
+      },
+    ])
+    new SyncRepository(db).link(server.id, 'local-1', 'work-1')
+
+    // Ten minutes read here; the server says three hundred across devices.
+    // Page turns closer together than the idle gap, so they are one sitting.
+    const sessions = new ReadingSessionRepository(db)
+    const started = Date.now() - 30 * 60_000
+    for (let step = 0; step <= 4; step += 1) {
+      sessions.record('local-1', started + step * 150_000, 0.1 + step * 0.05)
+    }
+
+    const local = new ReadingStatsRepository(db).stats()
+    expect(local.totalMs).toBe(10 * 60_000)
+    expect(local.source).toBe('local')
+
+    const first = local.week[0]!.date
+    const last = local.week.at(-1)!.date
+    const insights = await service.serverInsights(first, last)
+    expect(insights).not.toBeNull()
+
+    const merged = mergeServerStats(local, new ReadingStatsRepository(db).library(), insights!)
+    // Ten hours, from the server; not ten hours and ten minutes.
+    expect(merged.totalMs).toBe(600 * 60_000)
+    expect(merged.sittings).toBe(42)
+    expect(merged.streakDays).toBe(9)
+    expect(merged.rangeDays).toBe(30)
+    expect(merged.source).toBe('server')
+    // The book keeps its local name and gains the server's hours.
+    expect(merged.books[0]?.title).toBe('Guidebook')
+    expect(merged.books[0]?.ms).toBe(300 * 60_000)
+    expect(merged.week.at(-1)?.ms).toBe(120 * 60_000)
+    expect(asked.sort()).toEqual([
+      '/v1/insights/calendar',
+      '/v1/insights/summary',
+      '/v1/insights/works',
+    ])
   })
 
   it('says why a liseur-sync sign-in failed instead of just "login failed"', async () => {

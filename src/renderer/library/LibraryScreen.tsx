@@ -4,6 +4,7 @@ import { useLibraryStore } from './store'
 import { VirtualBookGrid } from './VirtualBookGrid'
 import { ContinueReading } from './ContinueReading'
 import { SettingsScreen } from '../settings/SettingsScreen'
+import { StatsScreen } from '../stats/StatsScreen'
 import { useTheme } from '../app/theme'
 import brandTile from '../assets/brand-tile.webp'
 import brandTileDark from '../assets/brand-tile-dark.webp'
@@ -22,6 +23,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   const [searchOpen, setSearchOpen] = createSignal(false)
   const [selectedIndex, setSelectedIndex] = createSignal(-1)
   const [settingsOpen, setSettingsOpen] = createSignal(false)
+  const [statsOpen, setStatsOpen] = createSignal(false)
   const [sortMenuOpen, setSortMenuOpen] = createSignal(false)
   let searchInput: HTMLInputElement | undefined
   let gridEl: HTMLDivElement | undefined
@@ -195,6 +197,15 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
           <button
             type="button"
             class="icon-button"
+            onClick={() => setStatsOpen(true)}
+            aria-label="Reading statistics"
+            title="Reading statistics"
+          >
+            ▥
+          </button>
+          <button
+            type="button"
+            class="icon-button"
             onClick={() => setTheme(theme() === 'dark' ? 'light' : 'dark')}
             aria-label="Toggle theme"
             title={`Theme: ${theme()}`}
@@ -224,6 +235,10 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
 
       <Show when={settingsOpen()}>
         <SettingsScreen onClose={() => setSettingsOpen(false)} />
+      </Show>
+
+      <Show when={statsOpen()}>
+        <StatsScreen onClose={() => setStatsOpen(false)} />
       </Show>
 
       <div class="filter-bar">

@@ -162,6 +162,12 @@ export function SettingsScreen(props: { onClose: () => void }): JSX.Element {
                       ? ` · synced ${new Date(server.lastSyncAt).toLocaleString()}`
                       : ''}
                   </span>
+                  <Show when={server.type === 'liseur-sync' && !server.sharesStats}>
+                    <span class="server-detail">
+                      Statistics are not shared with this server; totals stay on this computer.
+                      Remove and add it again to share them.
+                    </span>
+                  </Show>
                   <Show when={testResults()[server.id]}>
                     <span class="server-test-result">{testResults()[server.id]}</span>
                   </Show>

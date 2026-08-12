@@ -16,10 +16,6 @@ retired milestone roadmap against what actually exists in `src/`.
 
 ## Library / sync
 
-- **Reading statistics UI.** Sessions are already recorded and pushed to
-  liseur-sync (`src/worker/library/reading-sessions.ts`,
-  `src/worker/sync/sync-service.ts`), but no screen in `src/renderer`
-  displays them.
 - **Markdown export of annotations.** No export code exists anywhere in
   `src/`.
 - **Configurable shortcuts.** Reader keys (arrows/space/PgUp/PgDn/+/-/c/f/

@@ -9,6 +9,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '../shared/ipc/protocol'
 import type {
+  ReadingStats,
   ServerInfo,
   ServerType,
   SyncState,
@@ -233,6 +234,15 @@ const api = {
         (m): m is Extract<WorkerMessage, { kind: 'annotations.delete.result' }> =>
           m.kind === 'annotations.delete.result',
       ).then(() => undefined)
+    },
+  },
+  stats: {
+    get(): Promise<ReadingStats> {
+      return request(
+        (id) => ({ kind: 'stats.get', id }),
+        (m): m is Extract<WorkerMessage, { kind: 'stats.get.result' }> =>
+          m.kind === 'stats.get.result',
+      ).then((r) => r.stats)
     },
   },
   sync: {

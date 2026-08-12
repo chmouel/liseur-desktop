@@ -62,7 +62,5 @@ never full-dataset resends.
 
 ## Not yet built
 
-Reading statistics UI (the sessions behind it are already recorded and
-uploaded; only the screen is missing), Markdown export of annotations,
-configurable shortcuts, packaging polish (signing, auto-update, installers,
-release automation).
+Markdown export of annotations, configurable shortcuts, packaging polish
+(signing, auto-update).
