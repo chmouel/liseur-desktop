@@ -718,6 +718,13 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     }
   }
 
+  /** Mouse back button: undo the last jump, or exit if there is none. */
+  function handleBackButton(): void {
+    showChrome()
+    if (engine?.canGoBack()) void engine.goBack()
+    else close()
+  }
+
   function close(): void {
     cancelActiveSearch()
     const finalEngine = engine
@@ -742,6 +749,10 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   // not swallow page turns. One listener only (registered here, not on the
   // root div — both would fire for the same event).
   document.addEventListener('keydown', onKeydown)
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 3) handleBackButton()
+  }
+  document.addEventListener('mouseup', onMouseUp)
   const onFullscreenChange = () => setFullscreen(!!document.fullscreenElement)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   // Close-time handshake: main holds the window close until the final
@@ -804,6 +815,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
       // forwards them so chrome auto-hide and shortcuts work there too.
       created.onActivity(() => showChrome())
       created.onKeyEvent((e) => onKeydown(e))
+      created.onBackButton(handleBackButton)
       created.onCenterTap(() => {
         if (
           chromeVisible() &&
@@ -843,6 +855,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     cancelActiveSearch()
     void flushNote()
     document.removeEventListener('keydown', onKeydown)
+    document.removeEventListener('mouseup', onMouseUp)
     document.removeEventListener('fullscreenchange', onFullscreenChange)
     offFlush()
     window.liseur.reader.setActive(false)

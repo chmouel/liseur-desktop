@@ -86,6 +86,11 @@ export interface ReaderEngine {
   goToProgression(fraction: number): Promise<void>
   /** Navigate to a stored locator, re-anchoring by text quote (M6). */
   goToLocator(locator: Locator): Promise<void>
+  /** Whether a jump (TOC, scrubber, search/bookmark, in-book link) left a
+   *  position behind for the mouse back button to return to. */
+  canGoBack(): boolean
+  /** Undoes the last jump. No-op if `canGoBack()` is false. */
+  goBack(): Promise<void>
   setPreferences(prefs: ReaderPreferences): void
   preferences(): ReaderPreferences
   locator(): Locator
@@ -113,6 +118,8 @@ export interface ReaderEngine {
   onKeyEvent(listener: (event: { key: string; preventDefault(): void }) => void): void
   /** Tap on the middle third of the page (no text selection, no link). */
   onCenterTap(listener: () => void): void
+  /** The mouse's side "back" button, pressed anywhere over the book. */
+  onBackButton(listener: () => void): void
   destroy(): void
 }
 
@@ -152,7 +159,12 @@ export class ColumnEngine implements ReaderEngine {
     (event: { key: string; preventDefault(): void }) => void
   >()
   private readonly centerTapListeners = new Set<() => void>()
+  private readonly backButtonListeners = new Set<() => void>()
   private lastActivityAt = 0
+  private lastWheelAt = 0
+  /** Position to return to on the mouse back button; set by a jump (TOC,
+   *  scrubber, search/bookmark, in-book link), never by a plain page turn. */
+  private preJumpLocator: Locator | null = null
 
   constructor(
     private readonly container: HTMLElement,
@@ -239,6 +251,7 @@ export class ColumnEngine implements ReaderEngine {
     const [path, fragment] = splitFragment(href)
     const index = this.spine.findIndex((s) => s.href === path)
     if (index === -1) return
+    this.preJumpLocator = this.locator()
     await this.enqueue(async () => {
       this.endOfBook = false
       if (index === this.spineIndex && this.iframe.contentDocument) {
@@ -257,6 +270,7 @@ export class ColumnEngine implements ReaderEngine {
 
   async goToProgression(fraction: number): Promise<void> {
     const target = targetForProgression(this.pageCounts, fraction)
+    this.preJumpLocator = this.locator()
     await this.enqueue(async () => {
       this.endOfBook = false
       if (target.spineIndex === this.spineIndex) {
@@ -388,12 +402,32 @@ export class ColumnEngine implements ReaderEngine {
     this.centerTapListeners.add(listener)
   }
 
+  onBackButton(listener: () => void): void {
+    this.backButtonListeners.add(listener)
+  }
+
+  canGoBack(): boolean {
+    return this.preJumpLocator !== null
+  }
+
+  async goBack(): Promise<void> {
+    const target = this.preJumpLocator
+    if (!target) return
+    this.preJumpLocator = null // single-shot: consumed, not a multi-level stack
+    await this.performGoToLocator(target)
+  }
+
   /**
    * Navigates to a stored locator: chapter by href, then re-anchor by text
    * quote (survives typography changes) with a brief flash, falling back to
    * the stored progression when the quote can't be found.
    */
   async goToLocator(locator: Locator): Promise<void> {
+    this.preJumpLocator = this.locator()
+    await this.performGoToLocator(locator)
+  }
+
+  private async performGoToLocator(locator: Locator): Promise<void> {
     const [path] = splitFragment(locator.href)
     const index = this.spine.findIndex((s) => s.href === path)
     if (index === -1) return
@@ -475,6 +509,7 @@ export class ColumnEngine implements ReaderEngine {
     this.activityListeners.clear()
     this.keyListeners.clear()
     this.centerTapListeners.clear()
+    this.backButtonListeners.clear()
     this.highlightRanges.clear()
     this.flashRange = null
     // Clean the iframe's registry (kept by reference — the document is gone).
@@ -637,6 +672,23 @@ export class ColumnEngine implements ReaderEngine {
         for (const listener of this.selectionListeners) listener()
       }
       doc.addEventListener('mouseup', notifySelection)
+      doc.addEventListener('mouseup', (event) => {
+        if (event.button === 3) {
+          for (const listener of this.backButtonListeners) listener()
+        }
+      })
+      doc.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault()
+          const now = Date.now()
+          if (now - this.lastWheelAt < 250) return // one page per gesture
+          this.lastWheelAt = now
+          if (event.deltaY > 0) void this.nextPage()
+          else if (event.deltaY < 0) void this.prevPage()
+        },
+        { passive: false },
+      )
       doc.addEventListener('keyup', notifySelection)
       doc.addEventListener('keydown', (event) => {
         for (const listener of this.keyListeners) listener(event)
