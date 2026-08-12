@@ -31,6 +31,7 @@ updated as milestones progress (status changes, scope changes, decisions).
 13. An idle application must perform no recurring work — no polling timers
     unless strictly necessary.
 14. Performance regressions are bugs. Fix them before adding features.
+15. Never put a co-author on a commit without their explicit approval. If you are unsure, ask.
 
 ## Process boundaries (enforced, not advisory)
 
