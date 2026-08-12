@@ -3,7 +3,10 @@
 You are working on **Liseur Desktop**, a desktop EPUB reader whose defining
 quality is **snappiness**. Read this file and
 [docs/DESIGN.md](docs/DESIGN.md) before changing anything, and keep
-docs/DESIGN.md updated as the design changes.
+docs/DESIGN.md updated as the design changes. Check
+[docs/TODO.md](docs/TODO.md) for known-missing work before starting a
+feature: remove an item once it's implemented, and add one if you spot
+outstanding or planned work that isn't tracked there yet.
 
 ## Non-negotiable rules
 
