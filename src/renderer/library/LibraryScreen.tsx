@@ -104,7 +104,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   const openBook = (index: number) => {
     const book = store.books()[index]
     if (!book) return
-    // Seeded placeholders have no file; remote shells download on open (M7).
+    // Nothing to open until a book has a file; remote books fetch on open.
     if (!book.localPath && !book.remoteId) return
     props.onOpenBook(book.id)
   }

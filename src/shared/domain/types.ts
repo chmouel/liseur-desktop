@@ -41,7 +41,7 @@ export interface Book {
   remoteId?: string
   /** Which configured server this book came from (M7). */
   serverId?: string
-  /** Identifier used to derive/lookup the cover; placeholder covers in M1. */
+  /** Cover thumbnail to look up; books without one get a generated cover. */
   coverId?: string
   finished: boolean
   archived: boolean

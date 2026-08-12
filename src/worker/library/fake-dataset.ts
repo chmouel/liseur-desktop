@@ -1,11 +1,13 @@
 import type { Book, BookId } from '../../shared/domain/types'
 
 /**
- * Deterministic fake dataset for Milestone 1.
+ * Deterministic dataset for performance work. It is not how books get into
+ * the library — that is EPUB ingestion — and it is only ever generated when
+ * LISEUR_SEED_FAKE_LIBRARY=1 asks for it (see seed.ts).
  *
- * 5,000 books generated from a seeded PRNG (mulberry32) so every run —
- * including tests and profiling — sees the identical library. This validates
- * the async worker→renderer path that SQLite will replace in Milestone 2.
+ * Books come from a seeded PRNG (mulberry32) so every run — tests, profiling,
+ * before/after comparisons — sees an identical library and timings can be
+ * compared meaningfully.
  */
 
 // mulberry32: tiny fast seeded PRNG.

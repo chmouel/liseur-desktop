@@ -9,9 +9,9 @@ const dir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath
 
 /**
  * The worker is an Electron utilityProcess: an isolated Node context that
- * owns all expensive work (fake dataset now; SQLite, EPUB parsing, scanning
- * and server sync later). Main only forwards MessagePorts — it never touches
- * the data itself.
+ * owns all expensive work: SQLite, EPUB parsing, folder scanning, cover
+ * extraction and server sync. Main only forwards MessagePorts — it never
+ * touches the data itself.
  */
 
 let worker: UtilityProcess | undefined
