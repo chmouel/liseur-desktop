@@ -10,6 +10,7 @@ import type {
   RemoteServer,
   TestResult,
 } from './types'
+import type { WorkIdentifier } from './work-identifiers'
 
 /**
  * liseur-sync: the sync-first companion server (no catalog — it syncs
@@ -108,20 +109,31 @@ export class LiseurSyncCatalog implements RemoteCatalog {
     return null
   }
 
-  /** Resolves a local book to a server work id by content hash/title. */
+  /**
+   * Asks the server which of its works a local book is.
+   *
+   * The identifiers are the whole of the request: the server refuses a
+   * resolve that carries none, and matches the ones it is given literally,
+   * in its own order of strength. Title and author ride along only to name
+   * a work the server has to create, never to match one.
+   */
   async resolveWorkId(input: {
-    editionSha?: string | undefined
+    identifiers: WorkIdentifier[]
     title: string
-    authors: string[]
+    author?: string | undefined
   }): Promise<string | null> {
+    if (input.identifiers.length === 0) return null
     const res = await this.http.request('POST', '/v1/works/resolve', {
       body: JSON.stringify({
-        edition_sha: input.editionSha,
+        identifiers: input.identifiers.map((id) => ({ kind: id.kind, value: id.value })),
         title: input.title,
-        authors: input.authors,
+        author: input.author ?? '',
       }),
       headers: { 'content-type': 'application/json' },
     })
+    // 409 means these identifiers name more than one work on the server.
+    // Guessing would merge two books, so the book stays unresolved until a
+    // device that can ask its reader settles it.
     if (!res.ok || !res.value) return null
     const data = await res.value.json<{ work_id?: string }>()
     return data.work_id ?? null

@@ -942,6 +942,159 @@ describe('SyncService against mock Komga', () => {
     expect(Object.values(secrets)[0]?.['authorization']).toBe('Bearer device-secret')
   })
 
+  it('names a book to the server the way the phone names it', async () => {
+    // The resolve endpoint refuses a request with no `identifiers` (400,
+    // internal/api/works.go) and matches the ones it gets literally. Getting
+    // this shape wrong costs nothing visible and everything real: no work id
+    // means no link, and no link means no position sync, no sessions
+    // uploaded, and no book named on the statistics screen.
+    let resolveBody: Record<string, unknown> | undefined
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/v1/login') return jsonResponse({ auth_token: 'x', expires_in: 3600 })
+      if (path === '/v1/tokens') {
+        return jsonResponse({ token_id: 't', device_id: 'd', secret: 'device-secret' }, 201)
+      }
+      if (path === '/v1/changes') return jsonResponse({ ops: [], high_water: '0' })
+      if (path === '/v1/works/resolve') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          identifiers?: { kind: string; value: string }[]
+        }
+        // The server's own precondition, enforced here so the test fails the
+        // way the real server fails rather than passing on a mock's charity.
+        if (!body.identifiers?.length) return jsonResponse({ error: 'identifiers required' }, 400)
+        resolveBody = body as Record<string, unknown>
+        return jsonResponse({ work_id: 'work-9', confidence: 'high', created: false }, 200)
+      }
+      if (path === '/v1/ops') return jsonResponse({ accepted: 1 })
+      if (path.endsWith('/positions')) return jsonResponse({ ops: [] })
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const komga = await service.setupServer({
+      type: 'komga',
+      name: 'Komga',
+      url: 'http://komga.test',
+      username: 'reader',
+      secret: 'password',
+    })
+    const { server } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Sync',
+      url: 'http://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+
+    const books = new BookRepository(db)
+    books.insertBooks([
+      {
+        id: 'local-1',
+        title: "L'Étranger",
+        authors: ['Albert Camus', 'Someone Else'],
+        finished: false,
+        archived: false,
+        downloaded: true,
+        addedAt: Date.now(),
+      },
+    ])
+    db.prepare(
+      'UPDATE books SET file_hash = ?, epub_identifier = ?, remote_id = ?, server_id = ? WHERE id = ?',
+    ).run('ABCDEF', 'urn:isbn:9782070360024', '0K1Q', komga.server.id, 'local-1')
+
+    const book = books.getById('local-1')!
+    service.enqueueProgress(book, { href: 'ch1' }, 0.4)
+    await service.syncNow(server.id)
+
+    expect(resolveBody?.['identifiers']).toEqual([
+      { kind: 'sha256', value: 'abcdef' },
+      // The catalog's own id: the only name the phone also holds before
+      // either device has downloaded the file.
+      { kind: 'source', value: `komga:0K1Q` },
+      { kind: 'dc', value: 'urn:isbn:9782070360024' },
+      { kind: 'ta', value: 'l etranger|albert camus' },
+    ])
+    // Singular, and the first writer only, because that is what the phone
+    // sends; `authors` was never a field the server reads.
+    expect(resolveBody?.['author']).toBe('Albert Camus')
+    expect(resolveBody?.['authors']).toBeUndefined()
+
+    // Resolved once and remembered, so the book is now tracked with the
+    // server: this is what everything else hangs off.
+    expect(new SyncRepository(db).linkedRemoteId(server.id, 'local-1')).toBe('work-9')
+  })
+
+  it('collects the place another device left in a book never opened here', async () => {
+    // The changes feed talks about work ids. A book the server cannot name
+    // is skipped, and the cursor moves past it, so a position left on the
+    // phone before this machine knew the book would be lost for good.
+    // Naming the shelf first, and asking each newly named book for its
+    // position directly, is what recovers it.
+    const resolved: string[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/v1/login') return jsonResponse({ auth_token: 'x', expires_in: 3600 })
+      if (path === '/v1/tokens') {
+        return jsonResponse({ token_id: 't', device_id: 'd', secret: 'device-secret' }, 201)
+      }
+      if (path === '/v1/works/resolve') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { title?: string }
+        resolved.push(String(body.title))
+        return jsonResponse({ work_id: `work-for-${body.title}`, confidence: 'high' })
+      }
+      // The catch-up feed has nothing: the phone read this book long before
+      // this machine had ever heard of it.
+      if (path === '/v1/changes') return jsonResponse({ ops: [], high_water: '7' })
+      if (path === '/v1/works/work-for-Phone%20Book/positions') {
+        return jsonResponse({
+          ops: [
+            {
+              work_id: 'work-for-Phone Book',
+              progression: 0.66,
+              locator: { href: 'ch7' },
+              client_ts: new Date(Date.now() - 60_000).toISOString(),
+            },
+          ],
+        })
+      }
+      if (path.endsWith('/positions')) return jsonResponse({ ops: [] })
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const books = new BookRepository(db)
+    books.insertBooks([
+      {
+        id: 'local-1',
+        title: 'Phone Book',
+        authors: ['A Writer'],
+        finished: false,
+        archived: false,
+        downloaded: true,
+        addedAt: Date.now(),
+      },
+    ])
+
+    const { server } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Sync',
+      url: 'http://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+    await service.syncNow(server.id)
+
+    expect(resolved).toContain('Phone Book')
+    expect(books.getById('local-1')?.progress?.progression).toBeCloseTo(0.66)
+
+    // Named once: the next sync does not ask the server to identify the
+    // same book all over again.
+    resolved.length = 0
+    await service.syncNow(server.id)
+    expect(resolved).toEqual([])
+  })
+
   it('tells a liseur-sync server how long a book was read', async () => {
     // Positions say where you got to; only these say you were there for a
     // while. Without them the reading statistics on the phone count nothing

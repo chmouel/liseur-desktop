@@ -20,6 +20,11 @@ import {
 import { SyncRepository } from './sync-repository'
 import type { FetchLike } from './http'
 import type { ProgressRecord, RemoteBook, RemoteCatalog, RemoteServer, TestResult } from './types'
+import {
+  sourceIdentifier,
+  workIdentifiers,
+  type WorkIdentifier,
+} from './work-identifiers'
 
 /**
  * Sync orchestration (M7). Catalog sync streams remote books into local
@@ -39,6 +44,12 @@ const MAX_COVER_FETCHES = 4
 
 /** Tries per cover before giving up, so a flaky moment is not permanent. */
 const COVER_ATTEMPTS = 3
+
+/** Unnamed books one sync run introduces to a liseur-sync server. Naming
+ *  costs a request each, so the library catches up over a few runs rather
+ *  than making one sync wait for the whole shelf. The phone uses the same
+ *  number, for the same reason. */
+const MAX_RESOLVES_PER_RUN = 25
 
 /**
  * How old a catalog has to be before returning to the window re-pulls it.
@@ -358,8 +369,12 @@ export class SyncService {
       }
       // Catalog servers pull per-book; liseur-sync catches up via its
       // changes feed (cursor-persisted, 410 → heads resync).
-      if (catalog instanceof LiseurSyncCatalog) await this.syncLiseurChanges(catalog)
-      else await this.reconcileServer(catalog, withProgress)
+      if (catalog instanceof LiseurSyncCatalog) {
+        // Names first: an op names a work, so a book the server cannot name
+        // can neither receive what arrived nor send what it owes.
+        await this.nameLibrary(catalog)
+        await this.syncLiseurChanges(catalog)
+      } else await this.reconcileServer(catalog, withProgress)
       await this.uploadSessions(catalog)
       await this.flushQueue()
       this.repository.markSynced(serverId, Date.now())
@@ -504,6 +519,82 @@ export class SyncService {
       // worth failing a sync over.
       this.log(`sessions: ${(err as Error).message}`)
     }
+  }
+
+  /**
+   * Makes sure the books on this device have a name on the server.
+   *
+   * Every op the server sends is about a work id, so a book with no name
+   * can neither receive the position another device left nor send the one
+   * it owes — and worse, the changes cursor advances past the ops that were
+   * dropped for want of a name, so they never come round again.
+   *
+   * Naming costs a request each, so a run introduces only a handful, most
+   * recently read first, and the rest catch up over the runs that follow.
+   */
+  private async nameLibrary(catalog: LiseurSyncCatalog): Promise<void> {
+    const linked = new Set(
+      this.repository.linkedBookIds(catalog.server.id).map((link) => link.bookId),
+    )
+    const candidates = this.db
+      .prepare(
+        `SELECT id FROM books WHERE archived = 0
+          ORDER BY COALESCE(last_opened_at, 0) DESC, added_at DESC`,
+      )
+      .all() as unknown as { id: string }[]
+    const queued = new Map(this.repository.queue().map((row) => [row.bookId, row.updatedAt]))
+
+    let budget = MAX_RESOLVES_PER_RUN
+    for (const candidate of candidates) {
+      if (budget <= 0) break
+      if (linked.has(candidate.id)) continue
+      const book = this.books.getById(candidate.id)
+      if (!book) continue
+      const identity = this.identityOf(book)
+      // Nothing to say for itself: a name would be this device's alone.
+      if (identity.identifiers.length === 0) continue
+      budget -= 1
+      let workId: string | null
+      try {
+        workId = await catalog.resolveWorkId(identity)
+      } catch (err) {
+        // The server is unreachable; the rest of the library will not fare
+        // better, and the books keep their place in the queue for next time.
+        this.log(`resolve ${candidate.id}: ${(err as Error).message}`)
+        return
+      }
+      if (!workId) continue
+      this.repository.link(catalog.server.id, candidate.id, workId)
+      await this.seedNamedBook(catalog, candidate.id, workId, queued)
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+  }
+
+  /**
+   * Asks for a newly named book's position directly, once.
+   *
+   * Everything that happened to it before it had a name is behind the
+   * changes cursor, so the feed will never mention it again.
+   */
+  private async seedNamedBook(
+    catalog: LiseurSyncCatalog,
+    bookId: string,
+    workId: string,
+    queued: Map<string, number>,
+  ): Promise<void> {
+    const pull = await catalog.pullProgress(workId)
+    // An empty answer is still an answer; an error is not, and reconciling
+    // on one would read a timeout as "the server has never heard of this".
+    if (pull.status === 'error') {
+      this.log(`seed ${workId}: ${pull.detail}`)
+      return
+    }
+    await this.reconcileRemoteRecord(
+      bookId,
+      pull.status === 'ok' ? pull.record : null,
+      this.dirtyFor(bookId, catalog.server.id, queued),
+      { serverId: catalog.server.id, remoteId: workId },
+    )
   }
 
   private async reconcileServer(catalog: RemoteCatalog, withProgress: Set<string>): Promise<void> {
@@ -942,11 +1033,7 @@ export class SyncService {
         if (!catalog) continue // credentials pending: un-acked, row survives
         let remoteId = target.remoteId
         if (!remoteId && catalog instanceof LiseurSyncCatalog) {
-          const workId = await catalog.resolveWorkId({
-            editionSha: this.fileHashOf(book),
-            title: book.title,
-            authors: book.authors,
-          })
+          const workId = await catalog.resolveWorkId(this.identityOf(book))
           if (workId) {
             this.repository.link(target.serverId, row.bookId, workId)
             remoteId = workId
@@ -1062,10 +1149,45 @@ export class SyncService {
     }
   }
 
-  private fileHashOf(book: Book): string | undefined {
-    const row = this.db.prepare('SELECT file_hash FROM books WHERE id = ?').get(book.id) as
-      { file_hash: string | null } | undefined
-    return row?.file_hash ?? undefined
+  /**
+   * Everything this device can tell a sync server about which book this is.
+   *
+   * The catalog id matters most of all: it is the only identifier two
+   * devices share before either has downloaded the file, so it is what
+   * matches a book on the phone against the same book here.
+   */
+  private identityOf(book: Book): {
+    identifiers: WorkIdentifier[]
+    title: string
+    author?: string | undefined
+  } {
+    const row = this.db
+      .prepare('SELECT file_hash, epub_identifier, remote_id, server_id FROM books WHERE id = ?')
+      .get(book.id) as
+      | {
+          file_hash: string | null
+          epub_identifier: string | null
+          remote_id: string | null
+          server_id: string | null
+        }
+      | undefined
+    const origin = row?.server_id
+      ? this.repository.listServers().find((s) => s.id === row.server_id)
+      : undefined
+    // The phone names a book by its first writer; the catalog gives them in
+    // that order, so the first is the same one on both sides.
+    const author = book.authors[0]
+    return {
+      identifiers: workIdentifiers({
+        fileHash: row?.file_hash ?? undefined,
+        sourceId: sourceIdentifier(origin?.type, row?.remote_id ?? undefined),
+        dcIdentifier: row?.epub_identifier ?? undefined,
+        title: book.title,
+        author,
+      }),
+      title: book.title,
+      author,
+    }
   }
 
   /** Flush whatever was queued when the app last ran (called at startup). */

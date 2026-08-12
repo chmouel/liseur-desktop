@@ -187,8 +187,23 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   shell rows (server_id + remote_id); downloads land in `$DATA/downloads/`
   with content-hash dedupe (an existing local copy gets linked, not
   duplicated); opening a remote book downloads on demand.
-- Progress: every local save enqueues into `sync_queue` (coalesced per
-  book, persisted across restarts), flushed — serialized — on a 2 s
+- Naming books to liseur-sync (`work-identifiers.ts`): every op the server
+  sends names a *work*, so a book it cannot name can neither receive what
+  another device left nor send what it owes — and the changes cursor moves
+  past the ops it dropped, so they never come round again. Each sync
+  therefore names the shelf first, 25 unnamed books per run, most recently
+  read first; a newly named book is asked for its position directly, once,
+  because everything that happened to it before it had a name is behind the
+  cursor. `POST /v1/works/resolve` takes an `identifiers` array and nothing
+  else will do (it answers 400 without one): sha256 of the file, the
+  catalog's own id (`komga:<id>` — the only name two devices share before
+  either has downloaded anything), the EPUB's `dc:identifier`, and title +
+  author folded to a dull normal form. That folding is a *wire contract*
+  with the Android app, which is why `work-identifiers.test.ts` is a port of
+  the phone's own test vectors. Always send every identifier: a subset can
+  resolve to a second work and split a book in two. A 409 (the identifiers
+  name more than one work) leaves the book unnamed rather than guessing.
+- Progress: every local save enqueues into `sync_queue` (coalesced per  book, persisted across restarts), flushed — serialized — on a 2 s
   debounce, on `sync.syncNow`, and when credentials arrive. Delivery is
   tracked per target in `sync_acks` (book × server → acked queue version);
   a row dequeues only when every required target (catalog origin + all
