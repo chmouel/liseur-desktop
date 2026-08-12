@@ -44,7 +44,8 @@ test('reader preferences survive an application restart', async () => {
   await page.getByRole('button', { name: 'Typography' }).click()
   const popover = page.getByRole('dialog', { name: 'Typography' })
   await popover.getByRole('radio', { name: '2 columns' }).click()
-  for (let i = 0; i < 3; i++) await popover.getByRole('button', { name: 'Increase font size' }).click()
+  for (let i = 0; i < 3; i++)
+    await popover.getByRole('button', { name: 'Increase font size' }).click()
   await expect(popover.locator('.typography-value')).toHaveText('21')
   await expect
     .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).fontSize))
@@ -128,9 +129,7 @@ test('the font size goes well past 40px, and stops at the ceiling', async () => 
   )
 
   // The text is still paginated, not spilling out of the page.
-  expect(
-    await iframe.locator('body').evaluate((b) => b.scrollWidth >= b.clientWidth),
-  ).toBe(true)
+  expect(await iframe.locator('body').evaluate((b) => b.scrollWidth >= b.clientWidth)).toBe(true)
 
   // And the floor behaves symmetrically.
   const smaller = popover.getByRole('button', { name: 'Decrease font size' })

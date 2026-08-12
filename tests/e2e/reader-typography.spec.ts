@@ -84,9 +84,7 @@ test('book rendering: XHTML fidelity, publisher CSS, column gutter', async () =>
         parseFloat(getComputedStyle((f as HTMLIFrameElement).contentDocument!.body).columnGap),
     )
   const offset = () =>
-    iframe
-      .locator('body')
-      .evaluate((b) => new DOMMatrixReadOnly(getComputedStyle(b).transform).m41)
+    iframe.locator('body').evaluate((b) => new DOMMatrixReadOnly(getComputedStyle(b).transform).m41)
 
   await expect.poll(offset).toBeCloseTo(0, 0)
   await page.keyboard.press('ArrowRight')
