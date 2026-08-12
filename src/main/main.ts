@@ -11,6 +11,14 @@ import { registerBookScheme, handleBookRequests } from './book-content'
 // would then quit instantly against a running instance.
 if (process.env.LISEUR_DATA_DIR) app.setPath('userData', process.env.LISEUR_DATA_DIR)
 
+// Chromium only auto-detects a keyring on GNOME and KDE; everywhere else it
+// silently degrades to an unencrypted store and safeStorage reports itself
+// unavailable. Ask for the Secret Service explicitly (it falls back the same
+// way if libsecret is missing, so this is never worse than the default).
+if (process.platform === 'linux' && !/kde|plasma/i.test(process.env.XDG_CURRENT_DESKTOP ?? '')) {
+  app.commandLine.appendSwitch('password-store', 'gnome-libsecret')
+}
+
 // Scheme privileges must be registered before app ready.
 registerCoverScheme()
 registerBookScheme()

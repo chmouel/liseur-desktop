@@ -5,13 +5,13 @@ import { dataDir } from './paths'
 
 /**
  * Server credential store, backed by the OS keychain (Electron safeStorage:
- * Keychain on macOS, DPAPI on Windows, libsecret on Linux). Ciphertext lives
- * in `secrets.json` in the data dir — never in SQLite, never plaintext, and
- * never exposed to the renderer. Decrypted headers are forwarded to the
+ * Keychain on macOS, DPAPI on Windows, Secret Service on Linux). Ciphertext
+ * lives in `secrets.json` in the data dir — never in SQLite, never plaintext,
+ * and never exposed to the renderer. Decrypted headers are forwarded to the
  * worker in memory only.
  *
- * On Linux without a keyring, Electron falls back to a hardcoded key
- * ("basic" encryption) — documented in ARCHITECTURE.md's threat model.
+ * Linux note: main forces `--password-store=gnome-libsecret` (see main.ts)
+ * because Chromium only auto-detects a keyring on GNOME and KDE.
  */
 
 export interface StoredCredential {
@@ -63,7 +63,10 @@ export class SecretStore {
         plain: true,
       }
     } else {
-      throw new Error('secure credential storage is unavailable on this system')
+      throw new Error(
+        'secure credential storage is unavailable on this system — install a ' +
+          'keyring (gnome-keyring / KWallet) and unlock it, then try again',
+      )
     }
     this.persist()
   }
