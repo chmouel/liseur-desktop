@@ -47,14 +47,21 @@ keyboard, which makes the machine unusable while they run. Give them a
 hidden desktop of their own instead:
 
 ```bash
-printf 'output HEADLESS-1 mode 1600x1000\n' > /tmp/sway-headless.conf
-WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -c /tmp/sway-headless.conf &
-# sway prints its socket name on startup; wayland-2 here
-env -u DISPLAY WAYLAND_DISPLAY=wayland-2 pnpm test:e2e
+pnpm build && pnpm test:e2e:headless
 ```
 
-Xvfb works too if you have it. Electron's own `--ozone-platform=headless`
-does not; it crashes on startup.
+That runs Playwright inside a nested headless compositor and tears it down
+afterwards. `scripts/headless.sh` takes any command, so it works for a
+one-off script that opens a window too:
+
+```bash
+scripts/headless.sh node scratch-probe.mjs
+```
+
+Off Linux, or with no Wayland session to nest inside, it runs the command
+unchanged, so it is safe to leave in a script. Xvfb works too if you have no
+sway. Electron's own `--ozone-platform=headless` does not; it crashes on
+startup.
 
 ## A library big enough to measure
 

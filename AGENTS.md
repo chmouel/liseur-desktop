@@ -69,6 +69,41 @@ Before considering work done: `pnpm typecheck`, `pnpm lint`, `pnpm test`,
 and `pnpm test:e2e` must pass. Add unit tests for worker logic and
 virtualization math; add Playwright tests for user-facing behavior changes.
 
+`pnpm test:e2e` launches the built app from `out/`, and does **not** build
+first. A stale `out/` makes every spec for new work time out at 30 s with no
+useful error, so run `pnpm build` before it.
+
+### Never open test windows on somebody's screen
+
+The end-to-end tests open real application windows. On a developer machine
+they steal focus and the keyboard for the length of the run, and a stray
+click lands in whatever they are doing. Someone may be working at that
+screen right now, so on Linux always run them through the wrapper:
+
+```bash
+pnpm build && pnpm test:e2e:headless
+```
+
+It starts a nested headless compositor, runs the command inside it, and
+kills it afterwards. Use it for any throwaway script that opens a window
+too (`scripts/headless.sh node my-probe.mjs`), not just the suite. Where
+there is no Wayland session — CI, macOS — it runs the command unchanged.
+
+Two things it gets right that are easy to get wrong by hand:
+
+- **Never hard-code a `wayland-N` name.** Which one a nested compositor
+  gets depends on what is free, dead sockets litter the runtime directory,
+  and `wayland-1` is usually the _real_ session. Guessing wrong puts the
+  tests on the user's actual desktop. The wrapper asks the compositor
+  instead: sway sets `WAYLAND_DISPLAY` for anything it starts.
+- **Unset `SWAYSOCK`, not just `DISPLAY`.** `swaymsg` follows `SWAYSOCK`,
+  which keeps naming the real session however `WAYLAND_DISPLAY` is set, so
+  a command meant for the test compositor otherwise rearranges the user's
+  windows.
+
+Electron's own `--ozone-platform=headless` is not an option; it crashes on
+startup. Xvfb works if sway is unavailable.
+
 ## Git
 
 - Commitizen messages without scopes: `type: summary` (concise subject,
