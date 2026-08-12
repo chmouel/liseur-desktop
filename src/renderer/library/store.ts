@@ -50,6 +50,7 @@ export function useLibraryStore() {
     setFilter,
     setSort,
     refresh,
+    refreshContinueReading,
   }
 }
 
@@ -104,6 +105,8 @@ async function refreshContinueReading(): Promise<void> {
   }
 }
 
+let bookAddedDebounce: ReturnType<typeof setTimeout> | undefined
+
 export function initLibrary(): void {
   void refresh()
   void refreshContinueReading()
@@ -115,5 +118,15 @@ export function initLibrary(): void {
       next[index] = book
       return next
     })
+  })
+  // Ingestion reports books one at a time; a scan can add hundreds, so
+  // collapse bursts into a single re-query instead of inserting per event
+  // (which would also need filter/sort re-evaluation client-side).
+  window.liseur.library.onBookAdded(() => {
+    clearTimeout(bookAddedDebounce)
+    bookAddedDebounce = setTimeout(() => {
+      void refresh()
+      void refreshContinueReading()
+    }, 150)
   })
 }

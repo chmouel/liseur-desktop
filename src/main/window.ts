@@ -2,6 +2,7 @@ import { BrowserWindow, shell } from 'electron'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadWindowState, trackWindowState } from './window-state'
+import { interceptCloseForFlush } from './reader-state'
 
 const dir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url))
 
@@ -36,6 +37,7 @@ export function createMainWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.show())
 
   trackWindowState(win)
+  interceptCloseForFlush(win)
 
   // Security: never navigate the app window; external links go to OS browser.
   win.webContents.setWindowOpenHandler(({ url }) => {

@@ -3,6 +3,12 @@ import { createMainWindow } from './window'
 import { setupMenu } from './menu'
 import { startWorker } from './worker-host'
 import { setupIpc } from './ipc'
+import { registerCoverScheme, handleCoverRequests } from './covers'
+import { registerBookScheme, handleBookRequests } from './book-content'
+
+// Scheme privileges must be registered before app ready.
+registerCoverScheme()
+registerBookScheme()
 
 // Single-instance: focus the existing window instead of spawning another.
 if (!app.requestSingleInstanceLock()) {
@@ -21,6 +27,8 @@ if (!app.requestSingleInstanceLock()) {
     // shell paints as early as possible; the worker boots in parallel and
     // the renderer connects to it asynchronously.
     setupIpc()
+    handleCoverRequests()
+    handleBookRequests()
     createMainWindow()
     setupMenu()
     startWorker()

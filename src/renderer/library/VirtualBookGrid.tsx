@@ -109,6 +109,7 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                       src={coverFor(book)}
                       alt=""
                       loading="lazy"
+                      decoding="async"
                       draggable={false}
                       width={CARD_WIDTH}
                       height={192}
@@ -117,6 +118,11 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                     {book.downloaded && (
                       <span class="badge badge-downloaded" title="Downloaded">
                         ⬇
+                      </span>
+                    )}
+                    {book.remoteId && (
+                      <span class="badge badge-server" title="From a remote server">
+                        ☁
                       </span>
                     )}
                   </div>

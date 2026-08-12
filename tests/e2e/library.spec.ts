@@ -5,23 +5,36 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 /**
  * End-to-end smoke tests against the production build (run `pnpm build`
  * first; CI does). Electron tests run with workers=1 (see config).
+ *
+ * Each run gets a throwaway data directory: the worker seeds the fresh
+ * SQLite database with the deterministic 10,000-book dataset, and the tests
+ * never touch the developer's real library.
  */
 
 let app: ElectronApplication
 let page: Page
+let dataDir: string
 
 test.beforeAll(async () => {
-  app = await electron.launch({ args: ['.'], env: { ...process.env, NODE_ENV: 'test' } })
+  dataDir = mkdtempSync(join(tmpdir(), 'liseur-e2e-'))
+  app = await electron.launch({
+    args: ['.'],
+    env: { ...process.env, NODE_ENV: 'test', LISEUR_DATA_DIR: dataDir },
+  })
   page = await app.firstWindow()
   await page.waitForSelector('.library-screen')
 })
 
 test.afterAll(async () => {
   await app.close()
+  rmSync(dataDir, { recursive: true, force: true })
 })
 
 test('launches and renders the library shell', async () => {
@@ -85,7 +98,7 @@ test('keyboard navigation moves selection', async () => {
   await expect(page.locator('.book-card.selected')).not.toHaveAttribute('aria-label', selected!)
 })
 
-test('perf: 5000-book library is virtualized and fast', async () => {
+test('perf: 10,000-book library is virtualized and fast', async () => {
   // Never mount the full dataset: only visible + overscan rows exist.
   const cardCount = await page.locator('.book-card').count()
   expect(cardCount).toBeLessThan(500)

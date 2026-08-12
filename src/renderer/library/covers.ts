@@ -1,10 +1,13 @@
 /**
- * Deterministic placeholder covers for the fake dataset (Milestone 1).
+ * Book cover URLs.
  *
- * Covers are inline SVG data URIs derived purely from the book — no image
- * decoding storm, no assets to ship, and the same lazy-loading behavior the
- * real cover cache (Milestone 3) will need.
+ * Books with a real cover (ingested EPUBs, M3) get a `liseur-cover:` URL
+ * served from the worker-written thumbnail cache; everything else gets a
+ * deterministic inline-SVG placeholder — no decoding storm, no assets, and
+ * both kinds lazy-load the same way.
  */
+
+import { coverUrl } from '@shared/ipc/protocol'
 
 const PALETTES: readonly (readonly [string, string])[] = [
   ['#7a4a2b', '#ffdcc3'],
@@ -33,7 +36,11 @@ function initials(title: string): string {
 
 const cache = new Map<string, string>()
 
-export function coverFor(book: { id: string; title: string }): string {
+export function coverFor(book: { id: string; title: string; coverId?: string }): string {
+  // Real covers aren't cached client-side: the URL is cheap to compute and
+  // Chromium's HTTP cache + the on-disk cache handle the rest.
+  if (book.coverId) return coverUrl(book.coverId)
+
   const hit = cache.get(book.id)
   if (hit) return hit
 

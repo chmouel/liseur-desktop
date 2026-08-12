@@ -11,11 +11,21 @@ on the renderer's critical path.
 
 ## Status
 
-Milestones 0 + 1 complete: the foundation (secure Electron architecture) and
-the responsive library prototype (5,000-book virtualized library with instant
-search, filters, sorting, keyboard navigation, light/dark themes). See
-[DESIGN.md](DESIGN.md) for the roadmap — SQLite arrives in M2, the EPUB
-reader in M4–M5, remote catalogs/sync in M7.
+Milestones 0–4 complete: the foundation (secure Electron architecture), the
+responsive library prototype (virtualized cover grid with instant search,
+filters, sorting, keyboard navigation, light/dark themes), the
+SQLite-backed library (tested migrations, 10,000 books staying snappy),
+EPUB ingestion (open files, watch folders, metadata + covers, duplicate
+detection, progressive background scanning), and the reader proof of
+concept (pagination, one/two columns, locator restore, font size, reader
+themes, TOC — engine chosen in [ADR 0001](docs/adr/0001-reader-engine.md)),
+and the polished reader shell (auto-hiding chrome, typography popover with
+persisted preferences, scrubber, full-screen, shortcuts), annotations and
+in-book search (highlights with notes, bookmarks, streaming search with
+jump-to-result, typography-stable locators), and remote catalogs with sync
+(Komga, calibre-web and liseur-sync: catalog sync, downloads, progress sync
+with conflict resolution, keychain-stored credentials). All milestones in
+[DESIGN.md](DESIGN.md) are complete.
 
 ## Development setup
 

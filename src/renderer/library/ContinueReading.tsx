@@ -21,6 +21,8 @@ export function ContinueReading(props: { book: Book | null; onOpen: () => void }
             alt=""
             width={72}
             height={108}
+            loading="lazy"
+            decoding="async"
             draggable={false}
           />
           <div class="continue-body">

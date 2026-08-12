@@ -2,6 +2,10 @@ import { BrowserWindow, MessageChannelMain, ipcMain, nativeTheme } from 'electro
 import { IPC } from '../shared/ipc/protocol'
 import { readPersisted, writePersisted } from './window-state'
 import { startWorker } from './worker-host'
+import { openEpubDialog, addFolderDialog } from './dialogs'
+import { markReaderActive, markProgressFlushed } from './reader-state'
+import { sendAllCredentials, getWorker } from './worker-host'
+import { secretStore } from './secrets'
 import type { AppTheme, Settings } from '../shared/domain/types'
 
 /**
@@ -29,19 +33,52 @@ export function setupIpc(): void {
     const { port1, port2 } = new MessageChannelMain()
     worker.postMessage({ kind: 'connect' }, [port1])
     event.senderFrame?.postMessage(IPC.workerPort, null, [port2])
+    // Re-push credentials on every connect (cheap; covers late secrets).
+    sendAllCredentials(worker)
   })
+
+  // Credential presence only — secrets never cross this bridge.
+  ipcMain.handle(IPC.secretsHas, (_event, serverId: string) => secretStore.has(serverId))
+  ipcMain.handle(IPC.secretsClear, (_event, serverId: string) => {
+    secretStore.delete(serverId)
+    getWorker()?.postMessage({ kind: 'server-credentials', serverId, headers: {} })
+  })
+
+  // Native pickers for ingestion (M3). Fire-and-forget: chosen paths go
+  // straight to the worker; results stream back as bookAdded events.
+  ipcMain.handle(IPC.openEpubDialog, () => openEpubDialog())
+  ipcMain.handle(IPC.addFolderDialog, () => addFolderDialog())
+
+  // Reader close handshake: the renderer marks when a reader is active and
+  // acknowledges close-time flush requests (see reader-state.ts).
+  ipcMain.on(IPC.readerActive, (event, active: unknown) => {
+    markReaderActive(event.sender, active === true)
+  })
+  ipcMain.on(IPC.progressFlushed, (event) => markProgressFlushed(event.sender))
 
   ipcMain.handle(IPC.settingsGet, (): Settings => {
     const persisted = readPersisted()
-    return { theme: persisted.settings?.theme ?? 'system' }
+    const settings: Settings = { theme: persisted.settings?.theme ?? 'system' }
+    if (persisted.settings?.reader) settings.reader = persisted.settings.reader
+    return settings
   })
 
   ipcMain.handle(IPC.settingsSet, (_event, patch: Partial<Settings>) => {
     const current = readPersisted()
-    const theme = patch.theme ?? current.settings?.theme ?? 'system'
-    writePersisted({ settings: { theme } })
-    applyTheme(theme)
-    broadcast('liseur:settings-changed', { theme } satisfies Settings)
+    // Merge: a patch only replaces the keys it carries.
+    const settings: Settings = {
+      theme: patch.theme ?? current.settings?.theme ?? 'system',
+      ...((patch.reader ?? current.settings?.reader)
+        ? { reader: patch.reader ?? current.settings?.reader }
+        : {}),
+    }
+    if (!writePersisted({ settings })) {
+      // Settings are user state, not window bounds: failures must surface.
+      console.error('[main] failed to persist settings')
+      throw new Error('failed to persist settings')
+    }
+    applyTheme(settings.theme)
+    broadcast('liseur:settings-changed', settings)
   })
 
   applyTheme(readPersisted().settings?.theme ?? 'system')

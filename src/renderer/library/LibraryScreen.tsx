@@ -1,8 +1,9 @@
-import { createSignal, For, Show, type JSX } from 'solid-js'
+import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js'
 import type { LibraryFilter, LibrarySortKey } from '@shared/domain/types'
 import { useLibraryStore } from './store'
 import { VirtualBookGrid } from './VirtualBookGrid'
 import { ContinueReading } from './ContinueReading'
+import { SettingsScreen } from '../settings/SettingsScreen'
 import { useTheme } from '../app/theme'
 
 const FILTERS: readonly { id: LibraryFilter; label: string }[] = [
@@ -19,12 +20,13 @@ const SORTS: readonly { id: LibrarySortKey; label: string }[] = [
   { id: 'added', label: 'Recently added' },
 ]
 
-export function LibraryScreen(): JSX.Element {
+export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): JSX.Element {
   const store = useLibraryStore()
   const { theme, setTheme } = useTheme()
 
   const [searchOpen, setSearchOpen] = createSignal(false)
   const [selectedIndex, setSelectedIndex] = createSignal(-1)
+  const [settingsOpen, setSettingsOpen] = createSignal(false)
   let searchInput: HTMLInputElement | undefined
   let gridEl: HTMLDivElement | undefined
 
@@ -54,8 +56,13 @@ export function LibraryScreen(): JSX.Element {
 
   const onGlobalKeydown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement
-    const inField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+    const inField =
+      target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
     if (inField) return
+    if (settingsOpen()) {
+      if (e.key === 'Escape') setSettingsOpen(false)
+      return
+    }
 
     if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
       e.preventDefault()
@@ -97,18 +104,26 @@ export function LibraryScreen(): JSX.Element {
   const openBook = (index: number) => {
     const book = store.books()[index]
     if (!book) return
-    // Reader ships in Milestone 4 — acknowledge the intent without faking UI.
-    console.info(`[liseur] open book: ${book.title} (${book.id})`)
+    // Seeded placeholders have no file; remote shells download on open (M7).
+    if (!book.localPath && !book.remoteId) return
+    props.onOpenBook(book.id)
   }
 
-  // Menu accelerators from main (Ctrl/Cmd+F, Ctrl/Cmd+O, Ctrl/Cmd+,).
+  // Menu accelerators from main (Ctrl/Cmd+F, Ctrl/Cmd+,).
   window.liseur.app.onMenu((action) => {
     if (action === 'search') openSearch()
-    // open-epub / settings are stubs until M3/M5.
+    if (action === 'settings') setSettingsOpen(true)
   })
 
+  // Document-level key handling: Solid delegates element handlers, and keys
+  // targeted at <body> (e.g. after a form closes) never pass through the
+  // root div. The library screen unmounts while reading, so this listener
+  // never fights the reader's.
+  document.addEventListener('keydown', onGlobalKeydown)
+  onCleanup(() => document.removeEventListener('keydown', onGlobalKeydown))
+
   return (
-    <div class="library-screen" onKeyDown={onGlobalKeydown}>
+    <div class="library-screen">
       <header class="topbar">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">
@@ -154,16 +169,27 @@ export function LibraryScreen(): JSX.Element {
           <button
             type="button"
             class="icon-button"
+            onClick={() => void window.liseur.app.openEpubDialog()}
             aria-label="Add books"
-            title="Add (Milestone 3)"
+            title="Open EPUB… (Ctrl/Cmd+O)"
           >
             +
           </button>
-          <button type="button" class="icon-button" aria-label="More options" title="More">
+          <button
+            type="button"
+            class="icon-button"
+            aria-label="Settings"
+            title="Settings (Ctrl/Cmd+,)"
+            onClick={() => setSettingsOpen(true)}
+          >
             ⋮
           </button>
         </div>
       </header>
+
+      <Show when={settingsOpen()}>
+        <SettingsScreen onClose={() => setSettingsOpen(false)} />
+      </Show>
 
       <div class="filter-bar">
         <div class="chips" role="tablist" aria-label="Library filters">
@@ -205,7 +231,13 @@ export function LibraryScreen(): JSX.Element {
 
       <main class="library-main">
         <Show when={store.filter() === 'all' && !store.searchText()}>
-          <ContinueReading book={store.continueReadingBook()} onOpen={() => {}} />
+          <ContinueReading
+            book={store.continueReadingBook()}
+            onOpen={() => {
+              const book = store.continueReadingBook()
+              if (book?.localPath) props.onOpenBook(book.id)
+            }}
+          />
         </Show>
 
         <Show when={!store.loading() && store.books().length === 0}>

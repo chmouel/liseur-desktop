@@ -1,6 +1,7 @@
-import { app, nativeTheme, type BrowserWindow } from 'electron'
+import { nativeTheme, type BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { dataDir } from './paths'
 
 /**
  * Tiny synchronous JSON persistence for window bounds and app settings.
@@ -20,13 +21,19 @@ interface WindowState {
 
 interface PersistedState {
   window?: Partial<WindowState>
-  settings?: { theme?: 'system' | 'light' | 'dark' }
+  settings?: {
+    theme?: 'system' | 'light' | 'dark'
+    reader?:
+      { fontSize: number; theme: 'light' | 'sepia' | 'dark' | 'black'; columns: 1 | 2 } | undefined
+  }
 }
 
 const DEFAULTS: WindowState = { width: 1280, height: 800, dark: false }
 
 function stateFile(): string {
-  return join(app.getPath('userData'), 'window-state.json')
+  // Lives in the data dir (LISEUR_DATA_DIR override) so e2e runs are
+  // hermetic and never touch the real settings.
+  return join(dataDir(), 'window-state.json')
 }
 
 let cached: PersistedState | undefined
@@ -41,13 +48,15 @@ export function readPersisted(): PersistedState {
   return cached
 }
 
-export function writePersisted(patch: Partial<PersistedState>): void {
+export function writePersisted(patch: Partial<PersistedState>): boolean {
   cached = { ...readPersisted(), ...patch }
   try {
-    mkdirSync(app.getPath('userData'), { recursive: true })
+    mkdirSync(dataDir(), { recursive: true })
     writeFileSync(stateFile(), JSON.stringify(cached))
+    return true
   } catch {
-    // Losing window bounds is not worth surfacing an error.
+    // Callers decide: window bounds are best-effort, settings are not.
+    return false
   }
 }
 

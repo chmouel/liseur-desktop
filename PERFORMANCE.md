@@ -31,6 +31,53 @@ search round-trip.
 - DOM nodes while scrolling 5,000 books: bounded (~275 cards worst case on
   a large window), independent of library size.
 
+## Measured (Milestone 2, dev machine, 10,000 seeded books in SQLite)
+
+- Migration to schema v1: <1 ms; dev seed of 10,000 books: ~50 ms, both in
+  the worker while the window is already painting.
+- Full-library query (9,200 rows incl. row→Book mapping): ~40 ms cold,
+  faster warm; filtered/sorted queries 2–16 ms; search ~3 ms.
+- Search round-trip incl. 80 ms debounce: ~160 ms end-to-end in e2e.
+- DOM nodes while scrolling: unchanged, bounded (~275 cards worst case).
+
+## Measured (Milestone 3, dev machine)
+
+- Ingesting one EPUB (read + sha256 + ZIP/OPF parse + cover cache write):
+  single-digit ms; scans yield between books so library queries interleave.
+- Startup folder rescan with no changes: stat-only fast path (mtime+size),
+  no file reads or hashing.
+- Cover images are served as files over the `liseur-cover:` scheme and
+  decoded lazily (`loading="lazy"` + `decoding="async"`) by the virtualized
+  grid only — never base64 over IPC, never all-at-once.
+- Cover cache is content-addressed and write-once: re-ingests and books
+  sharing a cover cost zero extra disk writes.
+
+## Measured (Milestone 4, dev machine)
+
+- Page turn: one `transform` style write — no reflow, no IPC, no DB.
+- Chapter load: one `liseur-epub:` fetch + parse + first layout; adjacent
+  cost is paid once per chapter, not per page.
+- Book open: cold extraction (unzip to `$DATA/extracted/`) tens of ms for a
+  typical EPUB, off the renderer; warm opens skip it (mtime+size marker).
+- Typography/theme/column changes re-layout the current chapter only and
+  restore position by progression — no re-render of the book.
+- e2e: open → paginate → TOC jump → close → reopen restores the exact
+  locator (assertion on the rendered chapter and footer).
+
+## Measured (Milestones 6–7, dev machine)
+
+- Highlights render via the CSS Custom Highlight API: zero DOM mutation, no
+  relayout on render or on typography change (ranges are content-anchored).
+- In-book search streams per chapter off the EPUB zip; superseded scans stop
+  immediately (explicit cancel), so fast typers never queue stale work.
+- Sync: catalog pages stream in (bookAdded per page, never a full resend);
+  progress pushes are coalesced per book into a persisted queue flushed on a
+  2 s debounce with per-target acks — page turns never wait on the network.
+  All networking runs in the worker; startup never contacts a server before
+  the window paints.
+- e2e against a real local HTTP server: full add-server → sync → download →
+  read → progress-push cycle in ~4 s.
+
 ## Rules that protect the budgets
 
 See AGENTS.md for the full non-negotiable list. In short: never block the
@@ -48,6 +95,10 @@ Performance-sensitive notes:
 
 - `solid-js` — chosen for fine-grained reactivity (no VDOM diffing), which
   keeps list updates cheap.
+- `node:sqlite` (M2) — Node's built-in SQLite, used from the worker only.
+  Avoids a native npm dependency (better-sqlite3) that would need rebuilding
+  against Electron headers. Synchronous access is safe there: the worker is
+  a separate process, so queries never block the renderer.
 - Virtualization is a small in-house module (`src/renderer/library/virtualize.ts`)
   instead of a dependency.
 - Placeholder covers are inline SVG data URIs — no decoding storm, no assets.

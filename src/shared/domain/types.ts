@@ -16,6 +16,8 @@ export interface Locator {
     progression?: number
     totalProgression?: number
     position?: number
+    /** CSS selector of the anchoring element (highlights; M6). */
+    cssSelector?: string
   }
   text?: {
     before?: string
@@ -37,6 +39,8 @@ export interface Book {
   authors: string[]
   localPath?: string
   remoteId?: string
+  /** Which configured server this book came from (M7). */
+  serverId?: string
   /** Identifier used to derive/lookup the cover; placeholder covers in M1. */
   coverId?: string
   finished: boolean
@@ -69,6 +73,81 @@ export interface LibraryQueryResult {
 
 export type AppTheme = 'system' | 'light' | 'dark'
 
+/** Reader themes are independent of the app theme (see DESIGN.md). */
+export type ReaderTheme = 'light' | 'sepia' | 'dark' | 'black'
+
+export interface ReaderPreferences {
+  fontSize: number
+  theme: ReaderTheme
+  columns: 1 | 2
+}
+
 export interface Settings {
   theme: AppTheme
+  /** Reader preferences persist across sessions and books (M5). */
+  reader?: ReaderPreferences | undefined
+}
+
+/** One item of the reading order (a chapter document in the EPUB). */
+export interface SpineItem {
+  /** Archive path of the item, resolved against the OPF directory. */
+  href: string
+  mediaType: string
+  /** False for non-linear items (endnotes etc.); still navigable via TOC. */
+  linear: boolean
+}
+
+export interface TocEntry {
+  label: string
+  /** Archive path, optionally with #fragment. */
+  href: string
+  children: TocEntry[]
+}
+
+/** Returned when the reader opens a book: everything needed to render. */
+export interface OpenedBook {
+  book: Book
+  spine: SpineItem[]
+  toc: TocEntry[]
+  /** Base URL (liseur-epub scheme) the renderer builds resource URLs from. */
+  contentBaseUrl: string
+  /** Existing annotations (highlights + bookmarks) for this book. */
+  annotations: Annotation[]
+}
+
+export type AnnotationKind = 'highlight' | 'bookmark'
+
+export const HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink'] as const
+export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number]
+
+export interface Annotation {
+  id: string
+  bookId: string
+  kind: AnnotationKind
+  color?: HighlightColor | undefined
+  note?: string | undefined
+  /**
+   * Readium-compatible locator. For highlights, `text.before/highlight/after`
+   * plus a CSS selector in `locations.cssSelector` make the anchor survive
+   * typography changes (re-anchored from text, never geometry).
+   */
+  locator: Locator
+  createdAt: number
+  updatedAt: number
+}
+
+/** One in-book search hit, streamable from the worker. */
+export interface SearchResult {
+  /** Spine item archive path. */
+  href: string
+  /** Text context for re-anchoring and display. */
+  before: string
+  match: string
+  after: string
+}
+
+export interface SearchBatch {
+  results: SearchResult[]
+  /** True when the whole book has been searched. */
+  done: boolean
 }

@@ -1,4 +1,5 @@
 import { app, Menu, shell, BrowserWindow } from 'electron'
+import { openEpubDialog, addFolderDialog } from './dialogs'
 
 const isMac = process.platform === 'darwin'
 
@@ -15,8 +16,13 @@ export function setupMenu(): void {
         {
           label: 'Open EPUB…',
           accelerator: 'CmdOrCtrl+O',
-          // Milestone 3 — stub for now, must not throw.
-          click: () => send('liseur:menu:open-epub'),
+          // The dialog runs in main; chosen paths go straight to the worker.
+          click: () => void openEpubDialog(),
+        },
+        {
+          label: 'Add Folder…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => void addFolderDialog(),
         },
         { type: 'separator' },
         {

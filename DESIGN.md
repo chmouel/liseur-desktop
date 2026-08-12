@@ -55,8 +55,9 @@ Three strictly separated layers (details in `ARCHITECTURE.md`):
 2. **Renderer** (SolidJS) — presentation and immediate interaction only.
    `contextIsolation: true`, `nodeIntegration: false`. Never touches Node,
    filesystem, SQLite, or the network.
-3. **Worker** (Electron `utilityProcess`) — owns all expensive work: data
-   queries now; SQLite, EPUB parsing, scanning, and server sync later.
+3. **Worker** (Electron `utilityProcess`) — owns all expensive work:
+   SQLite library queries now; EPUB parsing, scanning, and server sync
+   later.
 
 The renderer talks to the worker asynchronously through a narrow, typed
 preload API (`window.liseur.*`). Updates are incremental (per-book events),
@@ -64,16 +65,16 @@ never full-dataset resends.
 
 ## Roadmap
 
-| Milestone                             | Scope                                                                                                                                                                                                                                                            | Status         |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **M0 — Foundation** | Electron + Vite + SolidJS + strict TS scaffold, secure process boundaries, worker skeleton, typed preload API, instant app shell, docs, CI | ✅ done |
-| **M1 — Responsive library prototype** | Library screen with 5,000 deterministic fake books, virtualized adaptive cover grid, Continue Reading, filters, sorting, instant search, keyboard navigation, light/dark themes, perf instrumentation, tests | ✅ done |
-| **M2 — SQLite library**               | Database + tested migrations, books/folders/progress tables, background DB in worker, typed renderer API replaces fake data; 10,000-book library stays responsive                                                                                                | ⬜ planned     |
-| **M3 — EPUB ingestion**               | Open EPUB, add/rescan folders, metadata + cover extraction, thumbnail cache, duplicate identification, progressive background scanning                                                                                                                           | ⬜ planned     |
-| **M4 — Reader proof of concept**      | Minimal reader: pagination, one/two columns, locator restore, font size, reader themes, TOC. Evaluate Readium Web; write ADR choosing the engine behind a `ReaderEngine` abstraction                                                                             | ⬜ planned     |
-| **M5 — Polished reader shell**        | Reader chrome, hidden reading mode, shortcuts, typography popover, progress footer, scrubber, full-screen, return to library                                                                                                                                     | ⬜ planned     |
-| **M6 — Annotations & in-book search** | Selection, highlights, notes, bookmarks, full-book streaming search, jump-to-result; locators stable across typography changes                                                                                                                                   | ⬜ planned     |
-| **M7 — Remote catalogs & sync**       | One server at a time, in order: **Komga → calibre-web → liseur-sync**. Connection settings, test connection, catalog sync, downloads, progress sync, conflict/catch-up UI. Capability-based interfaces; debounced/coalesced sync queue persisted across restarts | ⬜ planned     |
+| Milestone                             | Scope                                                                                                                                                                                                                                                            | Status  |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **M0 — Foundation**                   | Electron + Vite + SolidJS + strict TS scaffold, secure process boundaries, worker skeleton, typed preload API, instant app shell, docs, CI                                                                                                                       | ✅ done |
+| **M1 — Responsive library prototype** | Library screen with 5,000 deterministic fake books, virtualized adaptive cover grid, Continue Reading, filters, sorting, instant search, keyboard navigation, light/dark themes, perf instrumentation, tests                                                     | ✅ done |
+| **M2 — SQLite library**               | Database + tested migrations, books/folders/progress tables, background DB in worker, typed renderer API replaces fake data; 10,000-book library stays responsive                                                                                                | ✅ done |
+| **M3 — EPUB ingestion**               | Open EPUB, add/rescan folders, metadata + cover extraction, thumbnail cache, duplicate identification, progressive background scanning                                                                                                                           | ✅ done |
+| **M4 — Reader proof of concept**      | Minimal reader: pagination, one/two columns, locator restore, font size, reader themes, TOC. Evaluate Readium Web; write ADR choosing the engine behind a `ReaderEngine` abstraction                                                                             | ✅ done |
+| **M5 — Polished reader shell**        | Reader chrome, hidden reading mode, shortcuts, typography popover, progress footer, scrubber, full-screen, return to library                                                                                                                                     | ✅ done |
+| **M6 — Annotations & in-book search** | Selection, highlights, notes, bookmarks, full-book streaming search, jump-to-result; locators stable across typography changes                                                                                                                                   | ✅ done |
+| **M7 — Remote catalogs & sync**       | One server at a time, in order: **Komga → calibre-web → liseur-sync**. Connection settings, test connection, catalog sync, downloads, progress sync, conflict/catch-up UI. Capability-based interfaces; debounced/coalesced sync queue persisted across restarts | ✅ done |
 
 Later (unscheduled): reading statistics UI, Markdown export of annotations,
 configurable shortcuts, packaging polish (signing, auto-update, installers,
