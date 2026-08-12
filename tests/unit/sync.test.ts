@@ -306,21 +306,135 @@ describe('SyncService against mock Komga', () => {
     // thousand image requests for covers nobody has scrolled to.
     expect(books.getById(shell.id)?.coverId).toBeUndefined()
 
-    await service.ensureCover(shell.id)
-    const coverId = books.getById(shell.id)?.coverId
-    expect(coverId).toBeDefined()
-    expect(existsSync(join(dataDir, 'covers', coverId!))).toBe(true)
+    service.ensureCover(shell.id)
+    await vi.waitFor(() => expect(books.getById(shell.id)?.coverId).toBeDefined())
+    const coverId = books.getById(shell.id)!.coverId!
+    expect(existsSync(join(dataDir, 'covers', coverId))).toBe(true)
     expect(events.updated).toContain(shell.id)
 
     // Already cached: asking again is a no-op, not a second fetch.
     const updatesBefore = events.updated.length
-    await service.ensureCover(shell.id)
+    service.ensureCover(shell.id)
+    await new Promise((r) => setTimeout(r, 20))
     expect(events.updated).toHaveLength(updatesBefore)
 
     // A server with no art for a book is not an error.
     const noArt = repo.findByRemoteId(server.id, 'book-2')!
-    await service.ensureCover(noArt.id)
+    service.ensureCover(noArt.id)
+    await new Promise((r) => setTimeout(r, 20))
     expect(books.getById(noArt.id)?.coverId).toBeUndefined()
+  })
+
+  it('a screenful of covers is fetched a few at a time, and all of them arrive', async () => {
+    // Each request's timeout starts when it is created, not when a
+    // connection frees up. Firing seventy at once meant the ones at the
+    // back timed out while still queued: a library whose first twenty
+    // books had art and whose rest were placeholders forever.
+    const COUNT = 40
+    let inFlight = 0
+    let peak = 0
+    const fetchImpl: FetchLike = async (url) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        return jsonResponse({
+          content: Array.from({ length: COUNT }, (_, i) => ({
+            id: `b${i}`,
+            name: `Book ${i}`,
+            metadata: { title: `Book ${i}`, authors: [] },
+            media: { pagesCount: 10 },
+          })),
+          last: true,
+        })
+      }
+      if (path.endsWith('/thumbnail')) {
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        await new Promise((r) => setTimeout(r, 5))
+        inFlight--
+        return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 })
+      }
+      return jsonResponse({}, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const ids = Array.from({ length: COUNT }, (_, i) => repo.findByRemoteId(server.id, `b${i}`)!.id)
+    ids.forEach((id) => service.ensureCover(id))
+
+    await vi.waitFor(() => expect(ids.every((id) => books.getById(id)?.coverId)).toBe(true), {
+      timeout: 5_000,
+    })
+    expect(peak).toBeLessThanOrEqual(4)
+    expect(peak).toBeGreaterThan(1) // still concurrent, not one at a time
+  })
+
+  it('a cover that failed on a bad connection is tried again, but not forever', async () => {
+    // A timeout is not "this book has no cover". Without a retry a single
+    // flaky moment left a placeholder until the app was restarted.
+    let flakyAttempts = 0
+    let deadAttempts = 0
+    const fetchImpl: FetchLike = async (url) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        return jsonResponse({
+          content: [
+            { id: 'flaky', name: 'Flaky', metadata: { title: 'Flaky', authors: [] } },
+            { id: 'dead', name: 'Dead', metadata: { title: 'Dead', authors: [] } },
+            { id: 'artless', name: 'Artless', metadata: { title: 'Artless', authors: [] } },
+          ],
+          last: true,
+        })
+      }
+      if (path === '/api/v1/books/flaky/thumbnail') {
+        flakyAttempts++
+        if (flakyAttempts < 2) throw new Error('connection reset')
+        return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 })
+      }
+      if (path === '/api/v1/books/dead/thumbnail') {
+        deadAttempts++
+        throw new Error('connection reset')
+      }
+      return jsonResponse({}, 404) // artless: the server has no art for it
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const flaky = repo.findByRemoteId(server.id, 'flaky')!.id
+    const dead = repo.findByRemoteId(server.id, 'dead')!.id
+    const artless = repo.findByRemoteId(server.id, 'artless')!.id
+    ;[flaky, dead, artless].forEach((id) => service.ensureCover(id))
+
+    await vi.waitFor(() => expect(books.getById(flaky)?.coverId).toBeDefined())
+
+    // The one that never answers stops after a bounded number of tries: an
+    // idle app must not sit there retrying.
+    await vi.waitFor(() => expect(deadAttempts).toBe(3))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(deadAttempts).toBe(3)
+    expect(books.getById(dead)?.coverId).toBeUndefined()
+
+    // A 404 means the book has no art: one look, no retries.
+    expect(books.getById(artless)?.coverId).toBeUndefined()
   })
 
   it('asks Komga for ready EPUBs in the shape its search DSL accepts', async () => {

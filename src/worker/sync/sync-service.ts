@@ -26,11 +26,19 @@ import type { ProgressRecord, RemoteBook, RemoteCatalog, RemoteServer, TestResul
  * main as in-memory auth headers; nothing secret touches SQLite.
  */
 
+/** Covers fetched at once. Enough to fill a screen quickly, few enough
+ *  that the ones at the back are not waiting out their own timeout. */
+const MAX_COVER_FETCHES = 4
+
+/** Tries per cover before giving up, so a flaky moment is not permanent. */
+const COVER_ATTEMPTS = 3
+
 export interface SyncDeps {
   onBookAdded: (book: Book) => void
   onBookUpdated: (book: Book) => void
-  onStateChanged: (state: SyncState) => void
-  /** Forwards a secret to main's keychain store; throws if it can't persist. */
+  onStateChanged: (
+    state: SyncState,
+  ) => void /** Forwards a secret to main's keychain store; throws if it can't persist. */
   storeSecret: (
     serverId: string,
     headers: Record<string, string>,
@@ -57,6 +65,11 @@ export class SyncService {
   private readonly caughtUp = new Set<string>()
   /** Cover fetches in flight, so scrolling cannot stampede one book. */
   private readonly coversInFlight = new Set<string>()
+  /** Covers waiting their turn, oldest first (mirrored by a set for lookup). */
+  private readonly coverQueue: string[] = []
+  private readonly coverQueued = new Set<string>()
+  /** Failed tries per book, so retries stop rather than spin. */
+  private readonly coverAttempts = new Map<string, number>()
   /** The sync currently running, so a second request can join it. */
   private inFlight:
     | {
@@ -578,17 +591,44 @@ export class SyncService {
    * has scrolled to yet. The renderer asks per card as it comes into view,
    * and the cached cover arrives as a bookUpdated event.
    */
-  async ensureCover(bookId: string): Promise<void> {
+  ensureCover(bookId: string): void {
+    if (this.coversInFlight.has(bookId) || this.coverQueued.has(bookId)) return
     const book = this.books.getById(bookId)
     if (!book?.remoteId || !book.serverId || book.coverId) return
-    if (this.coversInFlight.has(bookId)) return
+    this.coverQueue.push(bookId)
+    this.coverQueued.add(bookId)
+    this.pumpCovers()
+  }
+
+  /**
+   * Drains the cover queue a few at a time.
+   *
+   * Every request carries a timeout that starts when it is created, not
+   * when the connection is free, so firing a screenful of covers at once
+   * means the ones at the back time out while still queued — which looked
+   * like a server that only had covers for the first twenty books.
+   */
+  private pumpCovers(): void {
+    while (this.coversInFlight.size < MAX_COVER_FETCHES && this.coverQueue.length > 0) {
+      const bookId = this.coverQueue.shift()!
+      this.coverQueued.delete(bookId)
+      this.coversInFlight.add(bookId)
+      void this.fetchCover(bookId).finally(() => {
+        this.coversInFlight.delete(bookId)
+        this.pumpCovers()
+      })
+    }
+  }
+
+  private async fetchCover(bookId: string): Promise<void> {
+    const book = this.books.getById(bookId)
+    if (!book?.remoteId || !book.serverId || book.coverId) return
     const catalog = this.catalogFor(book.serverId)
     if (!catalog) return
     const coverUrl =
       this.repository.remoteUrls(bookId).coverUrl ?? coverUrlFor(catalog, book.remoteId)
     if (!coverUrl) return
 
-    this.coversInFlight.add(bookId)
     try {
       const bytes = await catalog.fetchCover({
         remoteId: book.remoteId,
@@ -597,7 +637,7 @@ export class SyncService {
         downloadUrl: '',
         coverUrl,
       })
-      if (!bytes) return
+      if (!bytes) return // the book has no art; nothing to retry
       const coverId = storeCoverBytes(this.dataDir, bytes)
       if (!coverId) return
       // Re-read: a download may have landed a cover while this was in the
@@ -607,9 +647,17 @@ export class SyncService {
       this.books.setCoverId(bookId, coverId)
       const updated = this.books.getById(bookId)
       if (updated) this.deps.onBookUpdated(updated)
+      this.coverAttempts.delete(bookId)
     } catch {
-      // A cover is decoration; a server that will not serve one is not an
-      // error worth surfacing.
+      // A timeout or a dropped connection is not "this book has no cover".
+      // Give it a couple more goes, then leave it: a cover is decoration,
+      // and an app sitting idle must not keep retrying forever.
+      const attempts = (this.coverAttempts.get(bookId) ?? 0) + 1
+      this.coverAttempts.set(bookId, attempts)
+      if (attempts < COVER_ATTEMPTS) {
+        this.coverQueue.push(bookId)
+        this.coverQueued.add(bookId)
+      }
     } finally {
       this.coversInFlight.delete(bookId)
     }

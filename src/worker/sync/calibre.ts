@@ -165,7 +165,10 @@ export class CalibreCatalog implements RemoteCatalog {
   async fetchCover(book: RemoteBook): Promise<Buffer | null> {
     if (!book.coverUrl) return null
     const res = await this.http.request('GET', book.coverUrl)
-    if (!res.ok || !res.value) return null
+    if (res.status === 404 || res.status === 204) return null
+    if (!res.ok || !res.value) {
+      throw new Error(res.error ?? `cover fetch failed: HTTP ${res.status}`)
+    }
     return res.value.bytes()
   }
 
