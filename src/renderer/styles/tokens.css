@@ -1,0 +1,78 @@
+/**
+ * Design tokens — "paper & ink" palette from the Android app.
+ *
+ * Every color used by the UI lives here as a CSS variable. Components must
+ * reference var(--*) and never hard-code hex values, so themes stay a pure
+ * data concern.
+ *
+ * Reader themes (Light/Sepia/Dark/Black) are declared now but unused until
+ * the reader exists (Milestone 4+). They are deliberately independent of the
+ * app theme, matching the Android product model.
+ */
+
+:root {
+  --paper: #ffffff;
+  --ink: #15110c;
+  --leather: #7a4a2b;
+  --leather-dark: #5c3018;
+  --leather-light: #ffdcc3;
+  --leather-soft: #8b5e3c;
+  --teal: #3a5f5c;
+  --teal-light: #bdece6;
+  --logo-field: #fcf4ed;
+}
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: var(--paper);
+  --bg-elevated: #faf7f2;
+  --bg-sunken: #f3efe8;
+  --text: var(--ink);
+  --text-secondary: #5f5748;
+  --text-muted: #948a78;
+  --accent: var(--leather);
+  --accent-strong: var(--leather-dark);
+  --accent-soft: var(--leather-light);
+  --on-accent: #fffaf4;
+  --border: #e4ddd1;
+  --focus: var(--teal);
+  --danger: #a33b2e;
+  --shadow: rgb(21 17 12 / 0.08);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17130e;
+  --bg-elevated: #211b14;
+  --bg-sunken: #0f0c08;
+  --text: #f0e9dd;
+  --text-secondary: #b3a897;
+  --text-muted: #7a6f5f;
+  --accent: #c98d63;
+  --accent-strong: #e0a97e;
+  --accent-soft: #3c2a1c;
+  --on-accent: #1c130b;
+  --border: #352b1f;
+  --focus: #7fc4bb;
+  --danger: #e07a6a;
+  --shadow: rgb(0 0 0 / 0.4);
+}
+
+/* Reader themes (unused until Milestone 4) */
+[data-reader-theme='light'] {
+  --reader-bg: #ffffff;
+  --reader-text: #1a1a1a;
+}
+[data-reader-theme='sepia'] {
+  --reader-bg: #f6efdf;
+  --reader-text: #3d3229;
+}
+[data-reader-theme='dark'] {
+  --reader-bg: #1f1f1f;
+  --reader-text: #cecece;
+}
+[data-reader-theme='black'] {
+  --reader-bg: #000000;
+  --reader-text: #b8b8b8;
+}
