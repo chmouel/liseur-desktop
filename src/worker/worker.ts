@@ -324,8 +324,13 @@ function handleControlMessage(message: MainToWorkerMessage): void {
           : null,
       )
       // Credentials arriving (spawn or connect) flush whatever progress was
-      // queued while the app was last running — the queue persists restarts.
-      if (Object.keys(message.headers).length > 0) void sync.flushQueue()
+      // queued while the app was last running — the queue persists restarts —
+      // and pull the catalog once, so books added on the server while the
+      // app was closed are on the shelf without anyone pressing a button.
+      if (Object.keys(message.headers).length > 0) {
+        void sync.flushQueue()
+        sync.catchUp(message.serverId)
+      }
       break
     case 'secret-stored': {
       const pending = pendingSecretStores.get(message.requestId)

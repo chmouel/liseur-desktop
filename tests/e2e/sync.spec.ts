@@ -105,8 +105,9 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   // The server appears, connection tested as part of setup.
   await expect(dialog.locator('.server-name')).toHaveText('Test Komga', { timeout: 15_000 })
 
-  // --- sync the catalog -------------------------------------------------------
-  await dialog.getByRole('button', { name: 'Sync now' }).click()
+  // --- the catalog arrives on its own ------------------------------------------
+  // No "Sync now" click: adding a server that connects has to fill the shelf,
+  // or the app looks broken to anyone who does not find that button.
   await page.keyboard.press('Escape') // close settings
   await expect(dialog).not.toBeVisible()
 
@@ -115,7 +116,7 @@ test('Komga: add server, sync catalog, download on open, push progress', async (
   await page.getByRole('button', { name: 'Search' }).click()
   await page.locator('.search-input').fill('Remote Tome')
   const card = page.getByRole('gridcell', { name: /The Remote Tome/ })
-  await expect(card).toBeVisible({ timeout: 10_000 })
+  await expect(card).toBeVisible({ timeout: 15_000 })
   await expect(card.locator('.badge-server')).toBeVisible()
   await expect(card.locator('.badge-downloaded')).not.toBeVisible()
 

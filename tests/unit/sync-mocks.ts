@@ -25,6 +25,7 @@ export function mockKomga(
 ) {
   const progressPushes: { locator: { href: string }; progression?: number }[] = []
   const state = { failPulls: false }
+  const counters = { bookListRequests: 0 }
   const epub = buildReaderEpub({ chapters: 2 })
 
   const fetchImpl: FetchLike = async (url, init) => {
@@ -40,6 +41,7 @@ export function mockKomga(
     }
     if (u.pathname === '/api/v1/books/list' && init?.method === 'POST') {
       const page = Number(u.searchParams.get('page') ?? '0')
+      if (page === 0) counters.bookListRequests++
       const books = [
         {
           id: 'book-1',
@@ -87,5 +89,13 @@ export function mockKomga(
     return jsonResponse({ error: 'not found' }, 404)
   }
 
-  return { fetch: fetchImpl, progressPushes, state }
+  return {
+    fetch: fetchImpl,
+    progressPushes,
+    state,
+    /** How many catalog pulls the server has been asked for. */
+    get bookListRequests() {
+      return counters.bookListRequests
+    },
+  }
 }

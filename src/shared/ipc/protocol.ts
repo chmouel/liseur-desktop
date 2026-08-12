@@ -101,6 +101,11 @@ export type WorkerRequest =
   | { kind: 'sync.testConnection'; id: number; serverId: string }
   | { kind: 'sync.syncNow'; id: number; serverId: string }
   | { kind: 'sync.download'; id: number; bookId: string }
+  /**
+   * Fetch and cache one catalog book's cover. Answered by a bookUpdated
+   * event rather than a response: the renderer fires these per card as the
+   * grid scrolls and does not wait on any of them.
+   */
   | { kind: 'sync.getState'; id: number }
   | {
       kind: 'sync.resolveConflict'

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -245,6 +245,47 @@ describe('SyncService against mock Komga', () => {
     expect(new SyncRepository(db).listServers()).toHaveLength(1)
     service.removeServer(server.id)
     expect(new SyncRepository(db).listServers()).toHaveLength(0)
+  })
+
+  it('adding a server fills the shelf without anyone pressing Sync now', async () => {
+    // A server that connects but leaves the library empty looks broken.
+    // Deliberately never calls syncNow: the point is that nothing has to.
+    const komga = mockKomga()
+    const { service, events } = makeService(komga.fetch)
+
+    const { server, test } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    expect(test.ok).toBe(true)
+
+    await vi.waitFor(() => {
+      expect(events.added).toHaveLength(2)
+      expect(new SyncRepository(db).findByRemoteId(server.id, 'book-1')).toBeDefined()
+    })
+  })
+
+  it('credentials arriving at startup pull the catalog exactly once', async () => {
+    const komga = mockKomga()
+    const { service, events } = makeService(komga.fetch)
+    const server = new SyncRepository(db).addServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+    })
+
+    service.setCredentials(server.id, { headers: { 'x-api-key': 'api-key-1' } })
+    service.catchUp(server.id)
+    await vi.waitFor(() => expect(events.added).toHaveLength(2))
+
+    // Credentials are re-pushed on every renderer connect. That is a
+    // catch-up, not a poll: asking again must not sync again.
+    const listsBefore = komga.bookListRequests
+    service.catchUp(server.id)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(komga.bookListRequests).toBe(listsBefore)
   })
 
   it('komga listBooks parses pages via the catalog client', async () => {

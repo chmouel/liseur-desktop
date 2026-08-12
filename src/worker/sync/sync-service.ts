@@ -53,6 +53,15 @@ export class SyncService {
   private readonly catalogs = new Map<string, RemoteCatalog>()
   private syncing = false
   private flushTimer: ReturnType<typeof setTimeout> | undefined
+  /** Servers whose catalog has already been pulled in this process. */
+  private readonly caughtUp = new Set<string>()
+  /** The sync currently running, so a second request can join it. */
+  private inFlight:
+    | {
+        serverId: string
+        done: Promise<{ added: number; updated: number; error?: string }>
+      }
+    | undefined
 
   constructor(
     private readonly db: DatabaseSync,
@@ -73,10 +82,24 @@ export class SyncService {
     if (!credentials || Object.keys(credentials.headers).length === 0) {
       this.credentials.delete(serverId)
       this.catalogs.delete(serverId)
+      this.caughtUp.delete(serverId)
       return
     }
     this.credentials.set(serverId, credentials)
     this.catalogs.delete(serverId) // rebuild lazily
+  }
+
+  /**
+   * Pulls a server's catalog once per process, when its credentials first
+   * arrive. Without this the library only ever fills in if you find the
+   * "Sync now" button, and books added on the server since last launch
+   * never appear. Credentials are pushed again on every renderer connect,
+   * hence the guard: this is a catch-up, not a poll.
+   */
+  catchUp(serverId: string): void {
+    if (!this.credentials.has(serverId) || this.caughtUp.has(serverId)) return
+    this.caughtUp.add(serverId)
+    void this.syncNow(serverId)
   }
 
   private catalogFor(serverId: string): RemoteCatalog | null {
@@ -177,6 +200,10 @@ export class SyncService {
       detail: 'no catalog',
     }
     this.emitState()
+    // A server that connects but shows no books is indistinguishable from a
+    // broken one. Pull the catalog straight away, in the background so the
+    // settings dialog answers immediately.
+    if (test.ok) void this.syncNow(server.id)
     return { server: this.serverInfo(server), test }
   }
 
@@ -199,11 +226,32 @@ export class SyncService {
   /**
    * Full sync of one server: stream the catalog into local shell rows,
    * reconcile progress for books we track, then flush the push queue.
+   *
+   * Asking for a sync of a server that is already syncing joins the one in
+   * flight rather than refusing. Adding a server starts a sync in the
+   * background, and pressing "Sync now" a second later should wait for it,
+   * not report an error at a user who did nothing wrong.
    */
-  async syncNow(serverId: string): Promise<{ added: number; updated: number; error?: string }> {
+  syncNow(serverId: string): Promise<{ added: number; updated: number; error?: string }> {
+    if (this.inFlight?.serverId === serverId) return this.inFlight.done
+    if (!this.catalogFor(serverId)) {
+      return Promise.resolve({ added: 0, updated: 0, error: 'missing credentials' })
+    }
+    if (this.syncing) {
+      return Promise.resolve({ added: 0, updated: 0, error: 'sync already running' })
+    }
+    const done = this.runSync(serverId).finally(() => {
+      this.inFlight = undefined
+    })
+    this.inFlight = { serverId, done }
+    return done
+  }
+
+  private async runSync(
+    serverId: string,
+  ): Promise<{ added: number; updated: number; error?: string }> {
     const catalog = this.catalogFor(serverId)
     if (!catalog) return { added: 0, updated: 0, error: 'missing credentials' }
-    if (this.syncing) return { added: 0, updated: 0, error: 'sync already running' }
     this.syncing = true
     this.emitState()
 
