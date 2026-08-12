@@ -121,4 +121,14 @@ describe('migrate', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('waits for a locked database instead of failing the query', () => {
+    // Without a busy timeout, a database locked for even a moment (a WAL
+    // checkpoint, a second connection mid-write) makes queries throw, and a
+    // book simply refuses to open.
+    const db = openDatabase(':memory:')
+    const row = db.prepare('PRAGMA busy_timeout').get() as { timeout: number }
+    expect(row.timeout).toBeGreaterThan(0)
+    db.close()
+  })
 })

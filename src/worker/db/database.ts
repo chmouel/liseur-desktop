@@ -26,6 +26,11 @@ export function openDatabase(path: string): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA foreign_keys = ON')
   db.exec('PRAGMA synchronous = NORMAL')
+  // Without this, a momentarily locked database (WAL checkpoint, or a second
+  // connection mid-write) fails the query instead of waiting — a book would
+  // simply refuse to open. Blocking here is safe: this is the worker
+  // process, so it can never stall the renderer.
+  db.exec('PRAGMA busy_timeout = 5000')
   return db
 }
 
