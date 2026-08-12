@@ -166,6 +166,24 @@ jobs:
           {
             echo "## Install"
             echo
+            echo "On macOS, through Homebrew:"
+            echo
+            echo '```'
+            echo "brew tap chmouel/liseur https://github.com/${GITHUB_REPOSITORY}"
+            echo "brew install --cask chmouel/liseur/liseur"
+            echo '```'
+            echo
+            echo "The build is not signed, so macOS refuses the copy Homebrew"
+            echo "quarantines. Clear the flag once, as the cask reminds you, or pass"
+            echo "\`--no-quarantine\` to the install line and never see it:"
+            echo
+            echo '```'
+            echo "xattr -dr com.apple.quarantine /Applications/Liseur.app"
+            echo '```'
+            echo
+            echo "Taking the \`.dmg\` matching your Mac (\`arm64\` for Apple silicon, \`x64\`"
+            echo "for Intel) by hand works just as well."
+            echo
             echo "On Arch Linux, install \`liseur-desktop-bin\` from the AUR."
             echo
             echo "On other Linux, download the \`.AppImage\`, make it executable and run it:"
@@ -174,15 +192,8 @@ jobs:
             echo "chmod +x liseur-desktop-*.AppImage && ./liseur-desktop-*.AppImage"
             echo '```'
             echo
-            echo "On Debian and Ubuntu you can install the \`.deb\` instead."
-            echo
-            echo "On macOS, download the \`.dmg\` matching your Mac (\`arm64\` for Apple"
-            echo "silicon, \`x64\` for Intel) and drag Liseur to Applications. The build is"
-            echo "not signed, so macOS refuses it the first time. Clear the quarantine flag:"
-            echo
-            echo '```'
-            echo "xattr -dr com.apple.quarantine /Applications/Liseur.app"
-            echo '```'
+            echo "On Debian and Ubuntu you can install the \`.deb\` instead, and the same"
+            echo "Homebrew cask installs the AppImage where \`brew\` is what you already use."
             echo
             echo "Checksums for every file are in \`SHA256SUMS\`."
             echo
@@ -211,6 +222,89 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
+
+  homebrew:
+    name: Update the Homebrew cask
+    needs: publish
+    # This repository is its own Homebrew tap, and Homebrew reads the cask
+    # from the default branch rather than from the tag, so the cask has to be
+    # moved forward on main once the release it describes exists. Prereleases
+    # are skipped, or `brew upgrade` would hand one to everybody. A manual run
+    # rehearses everything and stops short of the push.
+    if: >-
+      !cancelled() && !contains(github.ref_name, '-') &&
+      ((startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success') ||
+      github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      # The one job in this workflow that writes to the repository itself.
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The tag is a detached commit; the cask has to land on the branch
+          # Homebrew will read it from. The whole history, because the push
+          # below may have to rebase onto whatever arrived in the meantime.
+          ref: main
+          fetch-depth: 0
+
+      - name: Point the cask at the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+
+          # The release published its own checksums a moment ago, so the
+          # downloads themselves need not be fetched again to be summed.
+          curl -fsSL -o /tmp/SHA256SUMS \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/SHA256SUMS"
+
+          node scripts/update-cask.mjs "$version" /tmp/SHA256SUMS
+
+          # A cask that does not parse is a cask nobody can install, and the
+          # mistake would otherwise surface on somebody else's machine. The
+          # rewrite touches five lines and is unit-tested, so a runner without
+          # Ruby is worth a warning rather than a failed release.
+          if command -v ruby > /dev/null; then
+            ruby -c Casks/liseur.rb
+          else
+            echo "::warning::no ruby on this runner, the cask was not parsed"
+          fi
+          git --no-pager diff -- Casks/liseur.rb
+
+      - name: Commit it to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/liseur.rb
+
+          if git diff --cached --quiet; then
+            echo "the cask already describes this release"
+            exit 0
+          fi
+
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          git commit -m "chore: point the Homebrew cask at ${version}"
+
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "a manual run gets this far and no further"
+            exit 0
+          fi
+
+          # main can move while a release is building, and losing the cask
+          # update to a race would leave the tap a version behind until
+          # somebody noticed.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not push the cask update to main"
+          exit 1
 
   aur:
     name: Update the AUR package

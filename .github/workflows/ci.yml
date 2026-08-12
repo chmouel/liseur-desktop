@@ -85,3 +85,37 @@ jobs:
 
           git show "$BASE:pnpm-lock.yaml" > /tmp/base-lock.yaml 2>/dev/null || : > /tmp/base-lock.yaml
           node scripts/check-lockfile-change.mjs /tmp/base-lock.yaml pnpm-lock.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The Homebrew cask is Ruby that nothing else in this repository can check,
+  # and a mistake in it is only discovered by somebody trying to install the
+  # application. Homebrew's own linter reads it, but only when it has changed:
+  # the check costs a minute of gem installation, and the cask is touched a
+  # few times a year.
+  cask:
+    name: Homebrew cask
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Style
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_ANALYTICS: '1'
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet "$BASE" HEAD -- Casks; then
+            echo "The cask is untouched." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if ! command -v brew > /dev/null; then
+            echo "::warning::no Homebrew on this runner, the cask was not checked"
+            exit 0
+          fi
+
+          brew style Casks/liseur.rb
