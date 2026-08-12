@@ -287,9 +287,13 @@ export class SyncService {
     let updated = 0
     let error: string | undefined
     this.lastErrors.delete(serverId)
+    // Remote ids the listing says have been read. Only these need the
+    // per-book progress request; see reconcileServer.
+    const withProgress = new Set<string>()
     try {
       for await (const page of catalog.listBooks()) {
         for (const remote of page) {
+          if (remote.progress) withProgress.add(remote.remoteId)
           const { book, added: isNew } = this.repository.upsertRemoteBook(serverId, remote)
           if (isNew) {
             added++
@@ -303,7 +307,7 @@ export class SyncService {
       // Catalog servers pull per-book; liseur-sync catches up via its
       // changes feed (cursor-persisted, 410 → heads resync).
       if (catalog instanceof LiseurSyncCatalog) await this.syncLiseurChanges(catalog)
-      else await this.reconcileServer(catalog)
+      else await this.reconcileServer(catalog, withProgress)
       await this.flushQueue()
       this.repository.markSynced(serverId, Date.now())
     } catch (err) {
@@ -333,11 +337,21 @@ export class SyncService {
   }
 
   /** Pull remote progress for tracked books and reconcile against local. */
-  private async reconcileServer(catalog: RemoteCatalog): Promise<void> {
+  private async reconcileServer(catalog: RemoteCatalog, withProgress: Set<string>): Promise<void> {
     const rows = this.trackedBooks(catalog.server.id)
     const queued = new Map(this.repository.queue().map((q) => [q.bookId, q.updatedAt]))
 
     for (const row of rows) {
+      const dirty = this.dirtyFor(row.bookId, catalog.server.id, queued)
+      const target = { serverId: catalog.server.id, remoteId: row.remoteId }
+      // A server that reports read progress in its listing has already told
+      // us this book is untouched, so asking again would cost a round trip
+      // to be told the same thing. An unread book only still needs
+      // reconciling when we have a local position waiting to go up.
+      if (catalog.listsProgress && !withProgress.has(row.remoteId)) {
+        if (dirty) await this.reconcileRemoteRecord(row.bookId, null, true, target)
+        continue
+      }
       // Pull errors must never drive reconciliation (a timeout is not an
       // empty server): skip the book entirely.
       const pull = await catalog.pullProgress(row.remoteId)
@@ -346,15 +360,7 @@ export class SyncService {
         continue
       }
       const remote = pull.status === 'ok' ? pull.record : null
-      await this.reconcileRemoteRecord(
-        row.bookId,
-        remote,
-        this.dirtyFor(row.bookId, catalog.server.id, queued),
-        {
-          serverId: catalog.server.id,
-          remoteId: row.remoteId,
-        },
-      )
+      await this.reconcileRemoteRecord(row.bookId, remote, dirty, target)
       await new Promise((resolve) => setImmediate(resolve))
     }
   }

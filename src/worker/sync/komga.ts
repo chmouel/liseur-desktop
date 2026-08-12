@@ -84,6 +84,9 @@ function listBody(query?: string): Record<string, unknown> {
 export class KomgaCatalog implements RemoteCatalog {
   private readonly http: Http
 
+  /** Komga puts readProgress on every book in a listing page. */
+  readonly listsProgress = true
+
   constructor(
     readonly server: RemoteServer,
     authHeaders: Record<string, string>,

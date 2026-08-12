@@ -70,6 +70,14 @@ export interface RemoteCatalog {
   download(book: RemoteBook): Promise<Buffer>
   fetchCover(book: RemoteBook): Promise<Buffer | null>
 
+  /**
+   * Does listBooks() report read progress on every book that has any? When
+   * it does, a sync can skip the per-book progress request for the books the
+   * listing left blank, which is most of a large shelf. Catalogs that leave
+   * this unset are asked about every book, one at a time.
+   */
+  readonly listsProgress?: boolean
+
   /** Progress sync capability (all three current server types support it). */
   pullProgress(remoteId: string): Promise<PullResult>
   pushProgress(remoteId: string, progress: ProgressRecord): Promise<'ok' | 'stale' | 'rejected'>

@@ -613,6 +613,67 @@ describe('SyncService against mock Komga', () => {
     expect(repo.queue()).toHaveLength(0)
   })
 
+  it('a sync of an untouched shelf does not ask about every book', async () => {
+    // Komga puts read progress on every book in a listing page, so asking
+    // again book by book is a round trip per book on every single sync: on
+    // a shelf of a few thousand, minutes of pointless requests.
+    const read = new Set(['book-1'])
+    const pushed: string[] = []
+    let progressRequests = 0
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/api/v2/users/me') return jsonResponse({ roles: ['ROLE_USER'] })
+      if (path === '/api/v1/books/list') {
+        return jsonResponse({
+          content: Array.from({ length: 30 }, (_, i) => ({
+            id: `book-${i}`,
+            name: `Book ${i}`,
+            metadata: { title: `Book ${i}`, authors: [] },
+            media: { pagesCount: 100 },
+            ...(read.has(`book-${i}`) ? { readProgress: { page: 50, completed: false } } : {}),
+          })),
+          last: true,
+        })
+      }
+      if (path.endsWith('/progression')) {
+        if (init?.method === 'PUT') {
+          pushed.push(path.split('/')[4]!)
+          return new Response(null, { status: 204 })
+        }
+        progressRequests++
+        return jsonResponse({
+          locator: { href: 'ch1.xhtml', locations: { totalProgression: 0.5 } },
+          modified: new Date(1_000).toISOString(),
+        })
+      }
+      return jsonResponse({}, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server } = await service.setupServer({
+      type: 'komga',
+      name: 'K',
+      url: 'http://komga.test',
+      secret: 'api-key-1',
+    })
+    await service.syncNow(server.id)
+
+    // One request, for the one book the listing said had been read.
+    expect(progressRequests).toBe(1)
+    const repo = new SyncRepository(db)
+    const books = new BookRepository(db)
+    const readBook = repo.findByRemoteId(server.id, 'book-1')!
+    expect(books.getById(readBook.id)?.progress?.progression).toBeCloseTo(0.5)
+
+    // A book we have read locally still reaches the server even though the
+    // listing called it untouched.
+    const mine = repo.findByRemoteId(server.id, 'book-7')!
+    service.enqueueProgress(mine, { href: 'ch2.xhtml' }, 0.8)
+    await service.syncNow(server.id)
+    expect(pushed).toContain('book-7')
+    expect(progressRequests).toBe(2) // still only the one read book
+  })
+
   it('two servers both fill the shelf, even when their catch-ups collide', async () => {
     // Credentials for every configured server arrive in the same tick at
     // startup. If the second catch-up is refused because the first is still
