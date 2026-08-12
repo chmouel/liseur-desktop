@@ -1,4 +1,58 @@
+# How this project treats the npm registry: as useful, and as hostile.
+#
+# Every recent npm compromise has followed the same shape — a maintainer
+# account is phished, a malicious version is published, and it is installed by
+# thousands of machines before anyone notices. Detection and removal usually
+# take hours to days. The settings below are aimed squarely at that window.
+#
+# SECURITY.md explains the reasoning in full.
+
+# Refuse any version published less than fourteen days ago. Every attack of
+# the last few years was found and yanked well inside a fortnight, so this
+# alone removes most of the exposure. pnpm's own default is one day.
+#
+# The cost is real: a fix published this morning cannot be installed today.
+# That is the trade, and it is deliberate.
+minimumReleaseAge: 20160
+
+# The emergency exit for the above. When a genuine security fix must be
+# installed before it has aged, name the package here, install, and then empty
+# this list again in the same pull request. A name left behind is a permanent
+# hole in the cooldown.
+minimumReleaseAgeExclude: []
+
+# The cooldown above governs fresh resolutions — the moment a new version is
+# chosen. The committed lockfile is not re-litigated against it on every
+# install, because it was already reviewed when it changed and because
+# entries that were legitimate when locked do not become suspect with age.
+# What guards the lockfile instead is the pull request check in ci.yml, which
+# asks the registry how old every *newly added* entry is and refuses anything
+# inside the cooldown. Grandfathering the past, gating the future.
+trustLockfile: true
+
+# Dependencies may come from the registry and nowhere else — no git URLs, no
+# arbitrary tarballs. This is pnpm's default; it is written down so that a
+# dependency which starts wanting one becomes a decision somebody has to make,
+# rather than something an install quietly permits.
+blockExoticSubdeps: true
+
+# Scripts refuse to run against a node_modules that disagrees with the
+# lockfile, so a hand-edited or half-installed tree cannot be built or tested
+# by accident.
+verifyDepsBeforeRun: install
+
+# Install scripts are arbitrary code execution at install time, which is how
+# most registry attacks actually land. pnpm blocks them by default; below is
+# the complete list of packages allowed one, and adding to it needs a reason
+# written down in the pull request.
+dangerouslyAllowAllBuilds: false
 allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+
+# Known vulnerabilities are checked on every pull request. Anything ignored
+# here must say why, and dev-only exposure is the only acceptable reason:
+# nothing from node_modules ships to users.
+auditConfig:
+  ignoreCves: []
