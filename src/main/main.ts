@@ -6,6 +6,11 @@ import { setupIpc } from './ipc'
 import { registerCoverScheme, handleCoverRequests } from './covers'
 import { registerBookScheme, handleBookRequests } from './book-content'
 
+// A custom data dir must own Electron's userData too, or the instance lock,
+// caches and the GPU profile stay shared with the real app — an e2e run
+// would then quit instantly against a running instance.
+if (process.env.LISEUR_DATA_DIR) app.setPath('userData', process.env.LISEUR_DATA_DIR)
+
 // Scheme privileges must be registered before app ready.
 registerCoverScheme()
 registerBookScheme()
