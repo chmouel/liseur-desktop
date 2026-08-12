@@ -1,8 +1,8 @@
 # Maintainer: Chmouel Boudjnah <chmouel@chmouel.com>
 #
-# Template. The release workflow fills in @PKGVER@ and the checksums, then
-# pushes the result to the AUR. Edit this file, never the copy in the AUR
-# repository: that one is overwritten on every tag.
+# Written by the release workflow of
+# https://github.com/chmouel/liseur-desktop from packaging/aur/PKGBUILD.in.
+# Anything changed here is lost on the next release.
 
 pkgname=liseur-desktop-bin
 pkgver=@PKGVER@

@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build, without the leading v (dry run — nothing is published)'
+        description: 'Version to build, without the leading v (dry run, nothing is published)'
         required: true
 
 permissions:
@@ -142,17 +142,19 @@ jobs:
           {
             echo "## Install"
             echo
-            echo "**Linux** — download the \`.AppImage\`, make it executable, run it:"
+            echo "On Arch Linux, install \`liseur-desktop-bin\` from the AUR."
+            echo
+            echo "On other Linux, download the \`.AppImage\`, make it executable and run it:"
             echo
             echo '```'
             echo "chmod +x liseur-desktop-*.AppImage && ./liseur-desktop-*.AppImage"
             echo '```'
             echo
-            echo "Debian and Ubuntu users can install the \`.deb\` instead."
+            echo "On Debian and Ubuntu you can install the \`.deb\` instead."
             echo
-            echo "**macOS** — download the \`.dmg\` for your Mac (\`arm64\` for Apple silicon,"
-            echo "\`x64\` for Intel) and drag Liseur to Applications. The build is not signed,"
-            echo "so macOS will refuse it the first time. Clear the quarantine flag once:"
+            echo "On macOS, download the \`.dmg\` matching your Mac (\`arm64\` for Apple"
+            echo "silicon, \`x64\` for Intel) and drag Liseur to Applications. The build is"
+            echo "not signed, so macOS refuses it the first time. Clear the quarantine flag:"
             echo
             echo '```'
             echo "xattr -dr com.apple.quarantine /Applications/Liseur.app"
@@ -226,13 +228,20 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${AUR_SSH_PRIVATE_KEY:-}" ]; then
-            echo "::warning::no AUR key configured — skipping the AUR update"
+            echo "::warning::no AUR key configured, skipping the AUR update"
             exit 0
           fi
           install -dm700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
-          ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          # The AUR's published host key, pinned rather than fetched: asking
+          # the server who it is and believing the answer proves nothing.
+          printf '%s %s %s\n' aur.archlinux.org ssh-ed25519 \
+            AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN \
+            > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts |
+            grep -q 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4'
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -q 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4'
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
 
           git clone ssh://aur@aur.archlinux.org/liseur-desktop-bin.git aur || {
