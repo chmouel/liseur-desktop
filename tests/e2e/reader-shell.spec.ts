@@ -40,7 +40,7 @@ test('reader shell: chrome, typography, scrubber, fullscreen, persistence', asyn
   await revealChrome(page)
   await expect(page.locator('.reader-topbar')).not.toHaveClass(/chrome-hidden/)
 
-  // --- typography popover: font size, theme, columns -----------------------
+  // --- typography popover: font size, columns ------------------------------
   await page.getByRole('button', { name: 'Typography' }).click()
   const popover = page.getByRole('dialog', { name: 'Typography' })
   await expect(popover).toBeVisible()
@@ -54,23 +54,23 @@ test('reader shell: chrome, typography, scrubber, fullscreen, persistence', asyn
     .not.toBe(fontSizeBefore)
   const fontSizeAfter = await iframe.locator('body').evaluate((b) => getComputedStyle(b).fontSize)
 
-  const currentTheme = await popover.locator('.theme-swatch.active').getAttribute('aria-label')
-  const targetTheme = currentTheme === 'sepia' ? 'dark' : 'sepia'
-  await popover.getByRole('radio', { name: targetTheme }).click()
-  await expect
-    .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).backgroundColor))
-    .toBe(targetTheme === 'sepia' ? 'rgb(246, 239, 223)' : 'rgb(31, 31, 31)')
+  // The page is paper, always: there is no reader theme to switch.
+  await expect(popover.locator('.theme-swatch')).toHaveCount(0)
+  await expect(iframe.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
+  // The measure is capped, so a column is the same width in either layout —
+  // switching adds a column (and its gutter), it doesn't squeeze the text.
   const colWidthBefore = await iframe
     .locator('body')
     .evaluate((b) => getComputedStyle(b).columnWidth)
   const oneCol = popover.getByRole('radio', { name: '1 column' })
   const twoCols = popover.getByRole('radio', { name: '2 columns' })
-  const inactive = (await oneCol.getAttribute('aria-checked')) === 'true' ? twoCols : oneCol
-  await inactive.click()
+  const startedAtOne = (await oneCol.getAttribute('aria-checked')) === 'true'
+  await (startedAtOne ? twoCols : oneCol).click()
   await expect
-    .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).columnWidth))
-    .not.toBe(colWidthBefore)
+    .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).columnCount))
+    .toBe(startedAtOne ? '2' : '1')
+  await expect(iframe.locator('body')).toHaveCSS('column-width', colWidthBefore)
 
   // Escape closes the popover (not the reader).
   await page.keyboard.press('Escape')

@@ -113,13 +113,30 @@ supportFetchAPI` so the renderer can `fetch()` chapter markup from its
   no layout shift, so the book never re-paginates when chrome toggles.
   Pointer movement, key presses, or a center tap bring it back; open
   popovers pin it.
-- Typography popover: font size, the four reader themes, one/two columns.
+- Typography popover: font size (10–96 px), one/two columns (the page is
+  always white — there is no reader theme).
   Preferences persist across sessions via `settings.reader` (merged patches
   in main's settings IPC).
+  The reader's font size is set on `<html>` and forced onto the book's text
+  with `font-size: inherit !important`. Without this the control does
+  nothing on most real books: publishers pin their text with *absolute*
+  sizes (`font-size: small`, `11px`), which are resolved from the browser
+  default and ignore the page entirely. Headings and small print are
+  restated in `em` so the hierarchy scales with the reader's size.
+- Line length is capped at a readable measure (`readerMeasurePx`), so a
+  maximised window gets margins rather than edge-to-edge lines. Breathing
+  room lives on the container *outside* the iframe: padding inside a multicol
+  box applies once around the whole flow, not per page.
+- The book's `<body>` box is normalised to the iframe's width (margin,
+  padding, border and width forced), and `pageStep()` measures the resulting
+  content box rather than assuming it. A page turn advances by exactly
+  `content width + gap`; if a book shrinks `<body>` (Calibre emits
+  `.calibre { margin: 0 5pt }` on every body it converts) every turn
+  overshoots by that inset and the error compounds until words are sliced off
+  both edges.
 - Scrubber: 0–1000 slider → `targetForProgression` (pure, unit-tested)
   maps to spine item + in-item progression; estimates self-correct on load.
-- Shortcuts: ←/→/Space/PgUp/PgDn turn pages, +/- font size, t theme,
-  c columns, f/F11 fullscreen, Esc (popovers → fullscreen → library).
+- Shortcuts: ←/→/Space/PgUp/PgDn turn pages, +/- font size, c columns, f/F11 fullscreen, Esc (popovers → fullscreen → library).
 - Progress durability: leading-edge + trailing saves, a revisioned
   localStorage outbox (survives crashes; replayed on open), and a close
   handshake — main holds window close until the worker acks the final save
@@ -228,6 +245,8 @@ beyond the tiny window-state read.
   entry/size/count limits.
 - Credentials use OS keychain encryption (`safeStorage` in
   `main/secrets.ts`) — never plaintext at rest, never in SQLite, never in
-  the renderer after setup. On Linux without a keyring, Electron falls back
-  to "basic" (obfuscated, machine-local) storage; the secrets file is always
-  written mode 0600.
+  the renderer after setup. Chromium only auto-detects a keyring on GNOME and
+  KDE, so on Linux main forces `--password-store=gnome-libsecret` (see
+  `main/main.ts`) — otherwise every other desktop silently degrades to an
+  unencrypted store and `safeStorage` reports itself unavailable. Setup fails
+  loudly rather than storing plaintext; the secrets file is written mode 0600.

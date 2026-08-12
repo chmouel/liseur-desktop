@@ -6,7 +6,6 @@ import {
   type Locator,
   type OpenedBook,
   type ReaderPreferences,
-  type ReaderTheme,
   type SearchResult,
 } from '@shared/domain/types'
 import {
@@ -16,7 +15,7 @@ import {
   type ReaderEngine,
   type SelectionAnchor,
 } from './engine'
-import { READER_THEMES, READER_THEME_ORDER } from './reader-theme'
+import { readerMeasurePx, clampFontSize, MIN_FONT_SIZE, MAX_FONT_SIZE } from './reader-theme'
 import { computeRange } from '../library/virtualize'
 import { normalizeText } from './anchoring'
 
@@ -570,7 +569,8 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
   // --- preferences (persisted via settings) --------------------------------
 
   function applyPrefs(patch: Partial<ReaderPreferences>): void {
-    const next = { ...prefs(), ...patch }
+    const merged = { ...prefs(), ...patch }
+    const next = { ...merged, fontSize: clampFontSize(merged.fontSize) }
     setPrefs(next)
     engine?.setPreferences(next)
     // Persist across sessions and books; tiny settings write, fire-and-forget
@@ -616,12 +616,6 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
       const group = (e.target as HTMLElement).closest('[role="radiogroup"]')
       group?.querySelector<HTMLElement>(`[data-value="${String(next)}"]`)?.focus()
     })
-  }
-
-  function cycleTheme(): void {
-    const order = READER_THEME_ORDER
-    const next = order[(order.indexOf(prefs().theme) + 1) % order.length] as ReaderTheme
-    applyPrefs({ theme: next })
   }
 
   function toggleFullscreen(): void {
@@ -686,13 +680,10 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
         break
       case '+':
       case '=':
-        applyPrefs({ fontSize: Math.min(40, prefs().fontSize + 1) })
+        applyPrefs({ fontSize: clampFontSize(prefs().fontSize + 1) })
         break
       case '-':
-        applyPrefs({ fontSize: Math.max(10, prefs().fontSize - 1) })
-        break
-      case 't':
-        cycleTheme()
+        applyPrefs({ fontSize: clampFontSize(prefs().fontSize - 1) })
         break
       case 'c':
         applyPrefs({ columns: prefs().columns === 1 ? 2 : 1 })
@@ -744,7 +735,12 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
     try {
       // Load persisted reader preferences before first layout.
       const settings = await window.liseur.settings.get()
-      if (settings.reader) setPrefs({ ...DEFAULT_READER_PREFERENCES, ...settings.reader })
+      if (settings.reader) {
+        // A stored size from an older build (or a hand-edited file) must not
+        // outlive the current bounds.
+        const stored = { ...DEFAULT_READER_PREFERENCES, ...settings.reader }
+        setPrefs({ ...stored, fontSize: clampFontSize(stored.fontSize) })
+      }
 
       const result = await window.liseur.reader.open(bookId)
       if (disposed || !viewport) return // closed while opening
@@ -921,7 +917,7 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
             class="icon-button"
             aria-label="Typography"
             aria-expanded={typographyOpen()}
-            title="Typography (size, theme, columns)"
+            title="Typography (size, columns)"
             onClick={() => togglePopover('typography')}
           >
             Aa
@@ -955,7 +951,8 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
               type="button"
               class="icon-button"
               aria-label="Decrease font size"
-              onClick={() => applyPrefs({ fontSize: Math.max(10, prefs().fontSize - 1) })}
+              disabled={prefs().fontSize <= MIN_FONT_SIZE}
+              onClick={() => applyPrefs({ fontSize: clampFontSize(prefs().fontSize - 1) })}
             >
               A−
             </button>
@@ -966,44 +963,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
               type="button"
               class="icon-button"
               aria-label="Increase font size"
-              onClick={() => applyPrefs({ fontSize: Math.min(40, prefs().fontSize + 1) })}
+              disabled={prefs().fontSize >= MAX_FONT_SIZE}
+              onClick={() => applyPrefs({ fontSize: clampFontSize(prefs().fontSize + 1) })}
             >
               A+
             </button>
-          </div>
-          <div class="typography-row">
-            <span class="typography-label">Theme</span>
-            <div
-              class="theme-swatches"
-              role="radiogroup"
-              aria-label="Reader theme"
-              onKeyDown={(e) =>
-                radioGroupKeydown(e, READER_THEME_ORDER, prefs().theme, (theme) =>
-                  applyPrefs({ theme }),
-                )
-              }
-            >
-              {READER_THEME_ORDER.map((t) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={prefs().theme === t}
-                  class="theme-swatch"
-                  classList={{ active: prefs().theme === t }}
-                  aria-label={t}
-                  title={t}
-                  data-value={t}
-                  tabIndex={prefs().theme === t ? 0 : -1}
-                  style={{
-                    background: READER_THEMES[t].background,
-                    color: READER_THEMES[t].color,
-                  }}
-                  onClick={() => applyPrefs({ theme: t })}
-                >
-                  A
-                </button>
-              ))}
-            </div>
           </div>
           <div class="typography-row">
             <span class="typography-label">Columns</span>
@@ -1194,7 +1158,11 @@ export function ReaderScreen(props: { bookId: string; onClose: () => void }): JS
       {/* No overlay buttons: they would block text selection (M6). Taps are
           handled inside the book — left/right third turns, center toggles
           chrome — see engine.ts. */}
-      <main class="reader-viewport" ref={(el) => (viewport = el)} />
+      <main
+        class="reader-viewport"
+        style={{ 'max-width': `${readerMeasurePx(prefs())}px` }}
+        ref={(el) => (viewport = el)}
+      />
 
       <footer
         classList={chromeClass()}

@@ -1,12 +1,14 @@
-/* Reader screen (M4). Chrome uses app theme tokens; the book viewport is
-   themed inside the iframe by reader-theme.ts (reader themes are
-   independent of the app theme). */
+/* Reader screen (M4). The reader is white on white: the chrome paints the
+   same paper as the book page (tokens.css pins the light palette on
+   .reader-screen), so there is no seam between shell and text. */
 
 .reader-screen {
   display: flex;
   flex-direction: column;
   height: 100%;
   outline: none;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .reader-topbar {
@@ -14,8 +16,7 @@
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--bg);
 }
 
 /* Hidden reading mode: chrome fades out (opacity only — no layout shift,
@@ -94,24 +95,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.theme-swatches {
-  display: flex;
-  gap: 6px;
-}
-
-.theme-swatch {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 2px solid var(--border);
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.theme-swatch.active {
-  border-color: var(--focus);
-}
-
 .columns-choice {
   border: 1px solid var(--border);
   background: none;
@@ -173,7 +156,11 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 16px 48px; /* breathing room lives outside the iframe: column math stays exact */
+  /* Breathing room and the readable-measure cap both live outside the
+     iframe, so the column math inside stays exact. */
+  padding: 16px 48px;
+  width: 100%;
+  margin-inline: auto;
 }
 
 .reader-iframe {
@@ -184,9 +171,9 @@
 }
 
 .reader-footer {
-  border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 12px;
+  background: var(--bg);
 }
 
 .reader-progress-track {

@@ -23,8 +23,7 @@ interface PersistedState {
   window?: Partial<WindowState>
   settings?: {
     theme?: 'system' | 'light' | 'dark'
-    reader?:
-      { fontSize: number; theme: 'light' | 'sepia' | 'dark' | 'black'; columns: 1 | 2 } | undefined
+    reader?: { fontSize: number; columns: 1 | 2 } | undefined
   }
 }
 

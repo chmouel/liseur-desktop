@@ -73,12 +73,13 @@ export interface LibraryQueryResult {
 
 export type AppTheme = 'system' | 'light' | 'dark'
 
-/** Reader themes are independent of the app theme (see DESIGN.md). */
-export type ReaderTheme = 'light' | 'sepia' | 'dark' | 'black'
-
+/**
+ * The reader page is always white on black ink — a book is paper. There is
+ * deliberately no reader theme picker: colour schemes belong to the app
+ * chrome, not to the text.
+ */
 export interface ReaderPreferences {
   fontSize: number
-  theme: ReaderTheme
   columns: 1 | 2
 }
 

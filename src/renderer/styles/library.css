@@ -87,6 +87,16 @@
   color: var(--text);
 }
 
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 /* --- Filter / sort bar --- */
 
 .filter-bar {

@@ -5,9 +5,9 @@
  * reference var(--*) and never hard-code hex values, so themes stay a pure
  * data concern.
  *
- * Reader themes (Light/Sepia/Dark/Black) are declared now but unused until
- * the reader exists (Milestone 4+). They are deliberately independent of the
- * app theme, matching the Android product model.
+ * The reader has no theme of its own: a book page is white paper with dark
+ * ink, and the reader chrome adopts the same white so page and chrome read
+ * as one surface. The app theme (light/dark) stops at the reader's door.
  */
 
 :root {
@@ -23,7 +23,8 @@
 }
 
 :root,
-[data-theme='light'] {
+[data-theme='light'],
+.reader-screen {
   color-scheme: light;
   --bg: var(--paper);
   --bg-elevated: #faf7f2;
@@ -59,20 +60,8 @@
   --shadow: rgb(0 0 0 / 0.4);
 }
 
-/* Reader themes (unused until Milestone 4) */
-[data-reader-theme='light'] {
-  --reader-bg: #ffffff;
-  --reader-text: #1a1a1a;
-}
-[data-reader-theme='sepia'] {
-  --reader-bg: #f6efdf;
-  --reader-text: #3d3229;
-}
-[data-reader-theme='dark'] {
-  --reader-bg: #1f1f1f;
-  --reader-text: #cecece;
-}
-[data-reader-theme='black'] {
-  --reader-bg: #000000;
-  --reader-text: #b8b8b8;
+/* White on white: the reader's chrome is the same paper as the page. */
+.reader-screen {
+  --bg: var(--paper);
+  --bg-elevated: var(--paper);
 }

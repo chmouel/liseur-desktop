@@ -50,7 +50,8 @@ updated as milestones progress (status changes, scope changes, decisions).
 - SolidJS signals/stores only. No Redux, no global state framework.
 - Plain CSS with the variables in `src/renderer/styles/tokens.css`. No CSS
   frameworks, no hard-coded hex colors in components.
-- Reader themes are independent of the app theme (both exist; don't merge).
+- The reader has no theme: the page and the reader chrome are always white.
+  The app theme (light/dark) stops at the reader's door.
 - Avoid animations unless they serve perceived latency; never animate
   typography reflow.
 

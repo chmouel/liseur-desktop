@@ -143,8 +143,16 @@ export function buildEpub(options: FixtureEpubOptions = {}): Buffer {
 }
 
 /** Multi-chapter EPUB for reader tests: nav (EPUB 3) or NCX (EPUB 2). */
-export function buildReaderEpub(options: { chapters?: number; ncx?: boolean } = {}): Buffer {
-  const { chapters = 3, ncx = false } = options
+export function buildReaderEpub(
+  options: {
+    chapters?: number
+    ncx?: boolean
+    publisherStyles?: boolean
+    /** Words per chapter — raise it when a test needs several pages. */
+    words?: number
+  } = {},
+): Buffer {
+  const { chapters = 3, ncx = false, publisherStyles = false, words = 200 } = options
 
   const chapterEntries: FixtureEntry[] = []
   const manifestItems: string[] = []
@@ -153,10 +161,17 @@ export function buildReaderEpub(options: { chapters?: number; ncx?: boolean } = 
   const ncxPoints: string[] = []
 
   for (let i = 1; i <= chapters; i++) {
-    const body = `Chapter ${i} `.concat(`word${i} `.repeat(200))
+    const body = `Chapter ${i} `.concat(`word${i} `.repeat(words))
+    // Real publishers emit XHTML: self-closing page markers (which the HTML
+    // parser would turn into an open <a> swallowing the chapter) and a
+    // stylesheet carrying their typography.
+    const styleLink = publisherStyles
+      ? '<link href="../styles.css" rel="stylesheet" type="text/css"/>'
+      : ''
+    const pageMarker = publisherStyles ? `<a id="page_${i}"/>` : ''
     chapterEntries.push({
       name: `OEBPS/text/ch${i}.xhtml`,
-      data: `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter ${i}</title></head><body><h1 id="ch${i}">Chapter ${i}</h1><p>${body}</p></body></html>`,
+      data: `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter ${i}</title>${styleLink}</head><body${publisherStyles ? ' class="calibre"' : ''}>${pageMarker}<h1 id="ch${i}">Chapter ${i}</h1><p class="para">${body}</p></body></html>`,
       deflate: true,
     })
     manifestItems.push(
@@ -167,6 +182,26 @@ export function buildReaderEpub(options: { chapters?: number; ncx?: boolean } = 
     ncxPoints.push(
       `<navPoint id="np${i}" playOrder="${i}"><navLabel><text>Chapter ${i}</text></navLabel><content src="text/ch${i}.xhtml"/></navPoint>`,
     )
+  }
+
+  if (publisherStyles) {
+    chapterEntries.push({
+      name: 'OEBPS/styles.css',
+      // Two things every real book does that the reader has to survive:
+      //  - `font-size: small` is an *absolute* size, and it ignores the page's
+      //    own font size unless the reader deliberately overrides it (the
+      //    reason the font control silently did nothing on real books).
+      //  - a body inset (Calibre emits `.calibre { margin: 0 5pt }` on every
+      //    body it converts) narrows the column box, so page turns overshoot
+      //    and slice words off the edge unless the reader neutralises it.
+      // The class selector matters: it outranks the reader's element rules,
+      // exactly as it does in the wild.
+      data: [
+        '.calibre { margin: 0 12px; }',
+        'p.para { text-align: justify; text-indent: 2em; font-size: small; }',
+      ].join('\n'),
+    })
+    manifestItems.push('<item id="css" href="styles.css" media-type="text/css"/>')
   }
 
   const opf = ncx

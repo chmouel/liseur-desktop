@@ -13,7 +13,13 @@ import {
   targetForProgression,
   totalProgression,
 } from './pagination'
-import { injectReaderAssets, itemDirOf } from './reader-theme'
+import {
+  injectReaderAssets,
+  itemDirOf,
+  columnGapFor,
+  clampFontSize,
+  DEFAULT_FONT_SIZE,
+} from './reader-theme'
 import { buildTextStream, locatorForRange, rangeForLocator } from './anchoring'
 
 /**
@@ -79,8 +85,7 @@ export interface ReaderEngine {
 }
 
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
-  fontSize: 18,
-  theme: 'light',
+  fontSize: DEFAULT_FONT_SIZE,
   columns: 1,
 }
 
@@ -123,7 +128,7 @@ export class ColumnEngine implements ReaderEngine {
     private readonly toc: TocEntry[],
     initial: ReaderPreferences,
   ) {
-    this.prefs = { ...initial }
+    this.prefs = { ...initial, fontSize: clampFontSize(initial.fontSize) }
     // Non-linear items count as 0 pages: linear page turning never visits
     // them, so they must not weigh on total progression estimates.
     this.pageCounts = spine.map((s) => (s.linear ? null : 0))
@@ -222,7 +227,7 @@ export class ColumnEngine implements ReaderEngine {
   }
 
   setPreferences(prefs: ReaderPreferences): void {
-    this.prefs = { ...prefs }
+    this.prefs = { ...prefs, fontSize: clampFontSize(prefs.fontSize) }
     this.relayout()
   }
 
@@ -354,8 +359,8 @@ export class ColumnEngine implements ReaderEngine {
           const rect = range.getBoundingClientRect()
           // Body is at translate(0) right after a load; include the current
           // page offset when we stayed in the same chapter.
-          const absX = rect.left + this.page * this.iframe.clientWidth
-          page = clampPage(Math.floor(absX / Math.max(1, this.iframe.clientWidth)), this.pageCount)
+          const absX = rect.left + this.page * this.pageStep()
+          page = clampPage(Math.floor(absX / this.pageStep()), this.pageCount)
           this.flashRange = range
         }
       }
@@ -466,7 +471,7 @@ export class ColumnEngine implements ReaderEngine {
     this.page = 0
     this.pageCount = 1
 
-    await this.renderMarkup(markup, item.href)
+    await this.renderMarkup(markup, item.href, item.mediaType)
     this.pageCount = this.measure()
     this.page = clampPage(typeof page === 'function' ? page(this.pageCount) : page, this.pageCount)
     this.apply()
@@ -485,11 +490,11 @@ export class ColumnEngine implements ReaderEngine {
   /**
    * Parses the chapter, installs our <base> (book resources resolve onto
    * the liseur-epub scheme) and a lockdown CSP (no scripts, frames, forms,
-   * connections), then srcdoc-loads the serialized document. DOMParser
+   * connections), then srcdoc-loads the serialized document. The parser
    * always produces html/head/body — no regex injection to bypass.
    */
-  private renderMarkup(markup: string, itemHref: string): Promise<void> {
-    const parsed = new DOMParser().parseFromString(markup, 'text/html')
+  private renderMarkup(markup: string, itemHref: string, mediaType: string): Promise<void> {
+    const parsed = parseChapter(markup, mediaType)
 
     const base = parsed.createElement('base')
     base.setAttribute('href', `${this.baseUrl}${itemDirOf(itemHref)}/`)
@@ -539,7 +544,7 @@ export class ColumnEngine implements ReaderEngine {
       this.iframe.clientWidth,
     )
     // Reading scrollWidth forces the reflow we just scheduled.
-    const count = pageCountFor(doc.body.scrollWidth, Math.max(1, this.iframe.clientWidth))
+    const count = pageCountFor(doc.body.scrollWidth, this.pageStep())
     // Only linear items feed total-progression estimates (see pagination.ts).
     if (this.spine[this.spineIndex]?.linear) this.pageCounts[this.spineIndex] = count
     // In-book interaction model (M6): no overlay buttons (they would block
@@ -612,7 +617,37 @@ export class ColumnEngine implements ReaderEngine {
   private apply(): void {
     const body = this.doc()?.body
     if (!body) return
-    body.style.transform = `translateX(${-this.page * this.iframe.clientWidth}px)`
+    body.style.transform = `translateX(${-this.page * this.pageStep()}px)`
+  }
+
+  /**
+   * Horizontal distance between two pages: the width of the multicol content
+   * box plus the gutter that trails the page's last column (that gutter sits
+   * off screen, which is why a page still shows exactly one viewport of text).
+   *
+   * The content box is *measured*, not assumed to be the iframe's width. A
+   * book that shrinks <body> — Calibre ships `margin: 0 5pt` on every
+   * converted body — would otherwise make every turn overshoot by that
+   * margin, and the error compounds page after page until the text is
+   * visibly sliced. The reader stylesheet also forces those insets to zero,
+   * so in practice the two agree; this keeps page turns aligned even when
+   * some publisher rule we haven't seen wins anyway.
+   */
+  private pageStep(): number {
+    return Math.max(1, this.contentWidth() + columnGapFor(this.prefs.columns))
+  }
+
+  /** Width the columns actually flow in: the body's box minus its padding. */
+  private contentWidth(): number {
+    const body = this.doc()?.body
+    const view = this.iframe.contentWindow
+    if (!body || !view) return this.iframe.clientWidth
+    const style = view.getComputedStyle(body)
+    const inner =
+      body.clientWidth -
+      (parseFloat(style.paddingLeft) || 0) -
+      (parseFloat(style.paddingRight) || 0)
+    return inner > 1 ? inner : this.iframe.clientWidth
   }
 
   private pageForFragment(fragment: string): number {
@@ -620,10 +655,10 @@ export class ColumnEngine implements ReaderEngine {
     const el = fragment ? doc?.getElementById(fragment) : null
     if (!doc || !el) return 0
     // getBoundingClientRect is viewport-relative; the body is at translate 0
-    // right after a load, and at -page*width otherwise — normalize both.
-    const currentOffset = this.page * this.iframe.clientWidth
+    // right after a load, and at -page*step otherwise — normalize both.
+    const currentOffset = this.page * this.pageStep()
     const absX = el.getBoundingClientRect().left + currentOffset
-    return clampPage(Math.floor(absX / Math.max(1, this.iframe.clientWidth)), this.pageCount)
+    return clampPage(Math.floor(absX / this.pageStep()), this.pageCount)
   }
 
   private chapterTitle(): string | undefined {
@@ -639,8 +674,53 @@ export class ColumnEngine implements ReaderEngine {
   }
 }
 
-export function flattenToc(toc: readonly TocEntry[]): TocEntry[] {
-  const out: TocEntry[] = []
+/**
+ * True when chapter markup should be parsed as XML rather than HTML. EPUB
+ * content documents are XHTML, and the manifest media type says so; the
+ * markup itself is checked too because publishers mislabel files.
+ */
+export function isXhtmlChapter(markup: string, mediaType: string): boolean {
+  if (/xhtml|\+xml|text\/xml/i.test(mediaType)) return true
+  const head = markup.slice(0, 1024)
+  return head.includes('<?xml') || head.includes('http://www.w3.org/1999/xhtml')
+}
+
+/**
+ * Chapter markup is XHTML, and XHTML is not HTML. Fed to the HTML parser,
+ * the page-break markers publishers sprinkle through a chapter —
+ * `<a id="page_42"/>` — become *open* anchors that swallow everything after
+ * them, so the whole chapter renders as one giant link. Parse XHTML as XML,
+ * then re-import it into an HTML document so the iframe's srcdoc parser
+ * (which is always an HTML parser) sees properly closed tags.
+ *
+ * Ill-formed markup — undeclared entities, real tag soup — falls back to the
+ * HTML parser, which is no worse than parsing everything as HTML.
+ */
+function parseChapter(markup: string, mediaType: string): Document {
+  if (isXhtmlChapter(markup, mediaType)) {
+    const xml = new DOMParser().parseFromString(markup, 'application/xhtml+xml')
+    const root = xml.documentElement
+    if (root && root.localName !== 'parsererror' && !root.querySelector('parsererror')) {
+      return asHtmlDocument(root)
+    }
+  }
+  return new DOMParser().parseFromString(markup, 'text/html')
+}
+
+/**
+ * Re-homes an XHTML tree into an HTML document. XHTML and HTML share a
+ * namespace, so the elements survive untouched and serialize with HTML
+ * rules (explicit end tags, void elements left open).
+ */
+function asHtmlDocument(root: Element): Document {
+  const doc = document.implementation.createHTMLDocument('')
+  doc.replaceChild(doc.importNode(root, true), doc.documentElement)
+  if (!doc.head) doc.documentElement.prepend(doc.createElement('head'))
+  if (!doc.body) doc.documentElement.append(doc.createElement('body'))
+  return doc
+}
+
+export function flattenToc(toc: readonly TocEntry[]): TocEntry[] {  const out: TocEntry[] = []
   const walk = (entries: readonly TocEntry[]) => {
     for (const entry of entries) {
       out.push(entry)

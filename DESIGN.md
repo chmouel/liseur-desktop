@@ -17,7 +17,7 @@ feature completeness. See `PERFORMANCE.md` for the concrete budgets and
 The Android app (`~/git/perso/liseur`) defines the product model: local-first
 EPUB library, calibre-web / Komga / liseur-sync integration, exact Readium
 locators, bookmarks/highlights/notes, reading statistics, typography
-configuration, Light/Sepia/Dark/Black reader themes, sync conflict handling.
+configuration, sync conflict handling.
 
 Branding — "paper & ink" palette:
 
@@ -31,8 +31,9 @@ Branding — "paper & ink" palette:
 | Logo field  | `#FCF4ED`                         |
 | Dark bg     | `#17130E`                         |
 
-Reader themes (independent of app theme): Light `#FFFFFF/#1A1A1A`,
-Sepia `#F6EFDF/#3D3229`, Dark `#1F1F1F/#CECECE`, Black `#000000/#B8B8B8`.
+The reader has no theme of its own: a page is paper `#FFFFFF` with ink
+`#1A1A1A`, and the reader chrome paints the same white so page and shell read
+as one surface. Colour schemes belong to the app chrome, not to the text.
 
 Fonts (later milestones): Publisher default, Literata, Vollkorn,
 Atkinson Hyperlegible, Inter.
@@ -71,7 +72,7 @@ never full-dataset resends.
 | **M1 — Responsive library prototype** | Library screen with 5,000 deterministic fake books, virtualized adaptive cover grid, Continue Reading, filters, sorting, instant search, keyboard navigation, light/dark themes, perf instrumentation, tests                                                     | ✅ done |
 | **M2 — SQLite library**               | Database + tested migrations, books/folders/progress tables, background DB in worker, typed renderer API replaces fake data; 10,000-book library stays responsive                                                                                                | ✅ done |
 | **M3 — EPUB ingestion**               | Open EPUB, add/rescan folders, metadata + cover extraction, thumbnail cache, duplicate identification, progressive background scanning                                                                                                                           | ✅ done |
-| **M4 — Reader proof of concept**      | Minimal reader: pagination, one/two columns, locator restore, font size, reader themes, TOC. Evaluate Readium Web; write ADR choosing the engine behind a `ReaderEngine` abstraction                                                                             | ✅ done |
+| **M4 — Reader proof of concept**      | Minimal reader: pagination, one/two columns, locator restore, font size, TOC. Evaluate Readium Web; write ADR choosing the engine behind a `ReaderEngine` abstraction                                                                             | ✅ done |
 | **M5 — Polished reader shell**        | Reader chrome, hidden reading mode, shortcuts, typography popover, progress footer, scrubber, full-screen, return to library                                                                                                                                     | ✅ done |
 | **M6 — Annotations & in-book search** | Selection, highlights, notes, bookmarks, full-book streaming search, jump-to-result; locators stable across typography changes                                                                                                                                   | ✅ done |
 | **M7 — Remote catalogs & sync**       | One server at a time, in order: **Komga → calibre-web → liseur-sync**. Connection settings, test connection, catalog sync, downloads, progress sync, conflict/catch-up UI. Capability-based interfaces; debounced/coalesced sync queue persisted across restarts | ✅ done |
