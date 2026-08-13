@@ -39,6 +39,9 @@ is `pnpm build` and the end-to-end suite.
 
 Installs refuse any version published less than fourteen days ago. If pnpm
 tells you a package is too new, it is working: wait, or pick an older version.
+
+## End-to-end tests
+
 The reasoning, and the escape hatch for a security fix that cannot wait, are
 in [SECURITY.md](../SECURITY.md).
 

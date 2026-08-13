@@ -1,10 +1,11 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, protocol } from 'electron'
 import { createMainWindow } from './window'
 import { setupMenu } from './menu'
 import { startWorker } from './worker-host'
 import { setupIpc } from './ipc'
-import { registerCoverScheme, handleCoverRequests } from './covers'
-import { registerBookScheme, handleBookRequests } from './book-content'
+import { COVER_SCHEME, handleCoverRequests } from './covers'
+import { BOOK_SCHEME, handleBookRequests } from './book-content'
+import { FONT_SCHEME, handleFontRequests } from './fonts'
 
 // A custom data dir must own Electron's userData too, or the instance lock,
 // caches and the GPU profile stay shared with the real app — an e2e run
@@ -19,9 +20,35 @@ if (process.platform === 'linux' && !/kde|plasma/i.test(process.env.XDG_CURRENT_
   app.commandLine.appendSwitch('password-store', 'gnome-libsecret')
 }
 
-// Scheme privileges must be registered before app ready.
-registerCoverScheme()
-registerBookScheme()
+// Scheme privileges must be registered together before app ready. Electron
+// retains only the final registration call, so splitting this list would make
+// earlier app protocols unavailable to the renderer.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: COVER_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: false, stream: true },
+  },
+  {
+    scheme: BOOK_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+  {
+    scheme: FONT_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+])
 
 // Single-instance: focus the existing window instead of spawning another.
 if (!app.requestSingleInstanceLock()) {
@@ -42,6 +69,7 @@ if (!app.requestSingleInstanceLock()) {
     setupIpc()
     handleCoverRequests()
     handleBookRequests()
+    handleFontRequests()
     createMainWindow()
     setupMenu()
     startWorker()

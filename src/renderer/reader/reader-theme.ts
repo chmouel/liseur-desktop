@@ -25,11 +25,11 @@ export function columnGapFor(columns: number): number {
 }
 
 /**
- * Comfortable line length, in multiples of the font size. Around 36em is
- * roughly 70 characters — the classic readable measure. Wider than this and
- * the eye loses the line on the way back.
+ * Comfortable line length, in multiples of the font size. 34em keeps the
+ * page intimate at the default 20px size — roughly 65 characters per line.
+ * Wider than this and the eye loses the line on the way back.
  */
-export const DEFAULT_MEASURE = 36
+export const DEFAULT_MEASURE = 34
 
 /**
  * Margin presets, as the measure each one leaves for the text. Narrow
@@ -70,7 +70,7 @@ export const MIN_FONT_SIZE = 10
 export const MAX_FONT_SIZE = 96
 
 /** Starting size, and the fallback for a corrupt persisted value. */
-export const DEFAULT_FONT_SIZE = 18
+export const DEFAULT_FONT_SIZE = 20
 
 export function clampFontSize(size: number): number {
   if (!Number.isFinite(size)) return DEFAULT_FONT_SIZE
@@ -103,6 +103,20 @@ export function buildReaderCss(prefs: ReaderPreferences, pageWidth: number): str
     Math.floor((pageWidth - (prefs.columns - 1) * gap) / prefs.columns),
   )
   return `
+    @font-face {
+      font-family: 'Liseur Literata';
+      src: url('liseur-font://font/roman') format('truetype');
+      font-style: normal;
+      font-weight: 200 900;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Liseur Literata';
+      src: url('liseur-font://font/italic') format('truetype');
+      font-style: italic;
+      font-weight: 200 900;
+      font-display: swap;
+    }
     html {
       margin: 0 !important; padding: 0 !important; border: 0 !important;
       height: 100%;
@@ -112,7 +126,7 @@ export function buildReaderCss(prefs: ReaderPreferences, pageWidth: number): str
          one declaration drives the whole book. */
       font-size: ${prefs.fontSize}px;
     }
-    body {
+    html body {
       /* The column arithmetic assumes the multicol box is exactly as wide as
          the iframe, so the book must not shrink it. Publishers routinely do:
          Calibre puts \`margin: 0 5pt\` on every <body> it converts. A margin
@@ -129,6 +143,10 @@ export function buildReaderCss(prefs: ReaderPreferences, pageWidth: number): str
       column-fill: auto;
       background: ${READER_BACKGROUND};
       color: ${READER_TEXT};
+      font-family: 'Liseur Literata', Georgia, serif !important;
+      font-optical-sizing: auto;
+      font-variant-ligatures: common-ligatures contextual;
+      font-feature-settings: 'liga' 1, 'clig' 1, 'calt' 1;
       line-height: 1.6;
       overflow-wrap: break-word;
       /* Page turns are transform-only; must not animate (reflow rule). */
@@ -145,6 +163,7 @@ export function buildReaderCss(prefs: ReaderPreferences, pageWidth: number): str
     article, aside, main, header, footer, figure, figcaption, a, em, strong,
     i, b, u, s, cite, q, abbr, label, address, pre, code, ins, del, mark {
       font-size: inherit !important;
+      font-family: inherit !important;
     }
     h1 { font-size: 1.8em !important; }
     h2 { font-size: 1.5em !important; }

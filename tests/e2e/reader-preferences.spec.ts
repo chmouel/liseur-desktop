@@ -39,6 +39,12 @@ test('reader preferences survive an application restart', async () => {
   await openBookByTitle(page, 'Reader Fixture')
   let iframe = page.frameLocator('.reader-iframe')
   await expect(iframe.locator('h1')).toHaveText('Chapter 1', { timeout: 10_000 })
+  await expect(iframe.locator('body')).toHaveCSS('font-size', '20px')
+  await expect
+    .poll(() =>
+      iframe.locator('body').evaluate(() => document.fonts.check("20px 'Liseur Literata'")),
+    )
+    .toBe(true)
 
   await revealChrome(page)
   await page.getByRole('button', { name: 'Typography' }).click()
@@ -46,10 +52,10 @@ test('reader preferences survive an application restart', async () => {
   await popover.getByRole('radio', { name: '2 columns' }).click()
   for (let i = 0; i < 3; i++)
     await popover.getByRole('button', { name: 'Increase font size' }).click()
-  await expect(popover.locator('[data-font-size]')).toHaveText('21')
+  await expect(popover.locator('[data-font-size]')).toHaveText('23')
   await expect
     .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).fontSize))
-    .toBe('21px')
+    .toBe('23px')
   await page.keyboard.press('Escape')
 
   await app.close()
@@ -65,7 +71,7 @@ test('reader preferences survive an application restart', async () => {
     .poll(() => iframe.locator('body').evaluate((b) => getComputedStyle(b).fontSize), {
       timeout: 10_000,
     })
-    .toBe('21px')
+    .toBe('23px')
   expect(
     await iframe.locator('body').evaluate((b) => {
       // How many columns actually fit in one viewport, as rendered.

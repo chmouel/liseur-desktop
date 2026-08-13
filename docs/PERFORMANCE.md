@@ -102,6 +102,10 @@ tooling are devDependencies; the app ships only what the build emits).
 
 Performance-sensitive notes:
 
+- `Literata` — two bundled variable TTFs (about 1.9 MB source total) provide
+  consistent offline reading typography. They are requested by the sandboxed
+  chapter only when a book opens; `font-display: swap` keeps first paint and
+  page turns non-blocking.
 - `solid-js` — chosen for fine-grained reactivity (no VDOM diffing), which
   keeps list updates cheap.
 - `node:sqlite` — Node's built-in SQLite, used from the worker only.

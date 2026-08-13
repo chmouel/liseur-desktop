@@ -67,8 +67,10 @@
 .brand-text {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
   line-height: 1.1;
+  text-align: center;
 }
 
 .brand-name {
@@ -78,7 +80,6 @@
 }
 
 .brand-count {
-  align-self: flex-start;
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--accent-soft);

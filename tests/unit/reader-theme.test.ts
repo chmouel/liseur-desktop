@@ -22,6 +22,10 @@ const prefs = (columns: 1 | 2, fontSize = 18, measure = DEFAULT_MEASURE) => ({
 })
 
 describe('clampFontSize', () => {
+  it('starts at a generous reading size', () => {
+    expect(DEFAULT_FONT_SIZE).toBe(20)
+  })
+
   it('keeps sizes within the readable bounds', () => {
     expect(clampFontSize(MIN_FONT_SIZE - 5)).toBe(MIN_FONT_SIZE)
     expect(clampFontSize(MAX_FONT_SIZE + 50)).toBe(MAX_FONT_SIZE)
@@ -65,6 +69,13 @@ describe('readerMeasurePx', () => {
 })
 
 describe('buildReaderCss', () => {
+  it('loads bundled Literata with standard ligatures', () => {
+    const css = buildReaderCss(prefs(1), 1000)
+    expect(css).toContain("font-family: 'Liseur Literata'")
+    expect(css).toContain("font-feature-settings: 'liga' 1, 'clig' 1, 'calt' 1")
+    expect(css).toContain('font-variant-ligatures: common-ligatures contextual')
+  })
+
   it('divides the page into columns, gutters included', () => {
     const css = buildReaderCss(prefs(2), 1000)
     // (1000 - 48) / 2
@@ -97,6 +108,10 @@ describe('buildReaderCss', () => {
 })
 
 describe('margins', () => {
+  it('uses a comfortable default measure', () => {
+    expect(DEFAULT_MEASURE).toBe(34)
+  })
+
   it('keeps a custom width within readable bounds', () => {
     expect(clampMeasure(MIN_MEASURE - 10)).toBe(MIN_MEASURE)
     expect(clampMeasure(MAX_MEASURE + 10)).toBe(MAX_MEASURE)

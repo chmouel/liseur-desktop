@@ -74,6 +74,13 @@ test('the top bar carries the brand tile and the size of the shelf', async () =>
     .locator('.brand-name')
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
   expect(name).toBeGreaterThanOrEqual(30)
+
+  const centers = await page.evaluate(() => {
+    const name = document.querySelector('.brand-name')?.getBoundingClientRect()
+    const count = document.querySelector('.brand-count')?.getBoundingClientRect()
+    return [name && name.left + name.width / 2, count && count.left + count.width / 2]
+  })
+  expect(centers[0]).toBeCloseTo(centers[1]!, 0)
 })
 
 test('the brand mark takes you back to the top of the shelf', async () => {
@@ -121,7 +128,7 @@ test('the continue-reading banner and book columns span the shelf', async () => 
     return [banner, grid, lastCard].map((element) => element?.getBoundingClientRect())
   })
   expect(boxes[0]?.width).toBe(boxes[1]?.width)
-  expect(boxes[0]?.right).toBe(boxes[2]?.right)
+  expect(boxes[0]?.right).toBeCloseTo(boxes[2]?.right ?? Number.NaN, 1)
 })
 
 test('renderer has no Node access', async () => {

@@ -32,11 +32,14 @@ The reader has no theme of its own: a page is paper `#FFFFFF` with ink
 `#1A1A1A`, and the reader chrome paints the same white so page and shell read
 as one surface. Colour schemes belong to the app chrome, not to the text.
 
-Planned fonts: Publisher default, Literata, Vollkorn, Atkinson Hyperlegible,
-Inter.
+The reader defaults to bundled Literata for consistent long-form typography;
+the font family picker will later offer Publisher default, Vollkorn, Atkinson
+Hyperlegible, and Inter.
 
 Library UX conventions carried over from Android:
 
+- The library wordmark and book-count pill are centered together beside the
+  reading-scene artwork
 - Filters: **All / Downloaded / Unread / Archived** (Archived is special)
 - Sorts: **Recent / Title / Author / Recently added**; activating the current
   sort flips its direction

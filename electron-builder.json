@@ -8,6 +8,12 @@
     "buildResources": "build"
   },
   "files": ["out/**", "package.json"],
+  "extraResources": [
+    {
+      "from": "src/renderer/assets/fonts",
+      "to": "fonts"
+    }
+  ],
   "asar": true,
   "compression": "maximum",
   "removePackageScripts": true,

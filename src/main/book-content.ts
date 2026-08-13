@@ -38,24 +38,6 @@ const CONTENT_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
 }
 
-/** Must run before app ready. */
-export function registerBookScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: BOOK_SCHEME,
-      // standard+corsEnabled+supportFetchAPI: the renderer fetch()es chapter
-      // markup from a file:// origin — without these Chromium blocks it.
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-        stream: true,
-      },
-    },
-  ])
-}
-
 /** Must run after app ready. */
 export function handleBookRequests(): void {
   protocol.handle(BOOK_SCHEME, (request) => {

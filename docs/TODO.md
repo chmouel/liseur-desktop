@@ -6,13 +6,10 @@ retired milestone roadmap against what actually exists in `src/`.
 
 ## Reader
 
-- **Font-family selection.** `docs/DESIGN.md:35` names Literata, Vollkorn,
-  Atkinson Hyperlegible and Inter as planned reader fonts. Nothing selects,
-  loads or applies a font family anywhere in `src/renderer/reader`; the
-  typography popover (`ReaderScreen.tsx`) only has font size, columns and
-  margins, and `reader-theme.ts` only ever sets `font-size`. Needs a
-  `fontFamily` preference, bundled webfonts (none are vendored today), a UI
-  row in the popover, and `font-family` wiring into the injected book CSS.
+- **Font-family selection.** The reader now bundles and defaults to Literata,
+  but the typography popover (`ReaderScreen.tsx`) still only has font size,
+  columns and margins. Needs a `fontFamily` preference, the remaining planned
+  fonts, and a UI row to choose them or return to Publisher default.
 
 ## Library / sync
 

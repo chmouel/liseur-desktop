@@ -608,7 +608,7 @@ export class ColumnEngine implements ReaderEngine {
     csp.setAttribute(
       'content',
       "default-src 'none'; img-src liseur-epub: data:; " +
-        "style-src 'unsafe-inline' liseur-epub:; font-src liseur-epub:; " +
+        "style-src 'unsafe-inline' liseur-epub:; font-src liseur-epub: liseur-font:; " +
         "media-src liseur-epub:; connect-src 'none'; frame-src 'none'; form-action 'none'",
     )
     parsed.head.prepend(csp)

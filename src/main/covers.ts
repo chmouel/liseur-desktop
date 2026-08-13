@@ -12,18 +12,6 @@ import { coversDir } from './paths'
 
 export const COVER_SCHEME = 'liseur-cover'
 
-/** Must run before app ready. */
-export function registerCoverScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: COVER_SCHEME,
-      // standard+secure so the scheme behaves like a real origin for <img>
-      // loads from the file://-origin renderer.
-      privileges: { standard: true, secure: true, supportFetchAPI: false, stream: true },
-    },
-  ])
-}
-
 /** Must run after app ready. */
 export function handleCoverRequests(): void {
   protocol.handle(COVER_SCHEME, (request) => {
