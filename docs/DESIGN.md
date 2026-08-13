@@ -41,7 +41,9 @@ Library UX conventions carried over from Android:
 - Sorts: **Recent / Title / Author / Recently added**; activating the current
   sort flips its direction
 - Search preserves its query when closed and reopened
-- Continue Reading card: cover + label + title + author + progress bar + percent
+- Continue Reading card: cover + label + title + author + progress bar + percent;
+  a paper-and-leather surface with a faint cover wash in light mode, stronger
+  cover artwork in dark mode, spanning the same shelf width as the book row
 - Book card: cover + badges (download/server/finished) + title + author
 
 The settings panel belongs to the application shell rather than to the

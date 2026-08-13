@@ -5,9 +5,9 @@ import { coverFor } from './covers'
 /**
  * "Continue reading" banner: the shelf with whatever you were last reading
  * on top. It is the thing on the library screen you are most likely to
- * click, so it's a hero card the width of the window — its own cover,
- * blurred and darkened, fills the background — rather than a thin strip
- * above the grid.
+ * click, so it's a hero card the width of the window rather than a thin
+ * strip above the grid. Its own cover fills the background in dark mode;
+ * light mode keeps it as a faint wash over the paper-and-leather palette.
  */
 
 export function ContinueReading(props: { book: Book | null; onOpen: () => void }): JSX.Element {

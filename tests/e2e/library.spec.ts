@@ -98,6 +98,32 @@ test('the continue-reading banner scrolls away with the shelf', async () => {
   await expect(banner).toBeInViewport()
 })
 
+test('the light continue-reading banner uses paper with a subtle cover wash', async () => {
+  const themeToggle = page.getByRole('button', { name: 'Toggle theme' })
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const theme = await page.evaluate(() => document.documentElement.dataset.theme)
+    if (theme === 'light') break
+    await themeToggle.click()
+  }
+
+  const banner = page.locator('.continue-reading')
+  await expect(banner).toHaveCSS('background-image', /linear-gradient/)
+  await expect(banner).toHaveCSS('backdrop-filter', 'none')
+  await expect(banner.locator('.continue-bg')).toHaveCSS('filter', /blur\(32px\).*saturate\(0\.8\)/)
+  await expect(banner.locator('.continue-bg')).toHaveCSS('opacity', '0.14')
+})
+
+test('the continue-reading banner and book columns span the shelf', async () => {
+  const boxes = await page.evaluate(() => {
+    const banner = document.querySelector('.continue-reading')
+    const grid = document.querySelector('.book-grid')
+    const lastCard = document.querySelector('.book-grid .book-card:last-child')
+    return [banner, grid, lastCard].map((element) => element?.getBoundingClientRect())
+  })
+  expect(boxes[0]?.width).toBe(boxes[1]?.width)
+  expect(boxes[0]?.right).toBe(boxes[2]?.right)
+})
+
 test('renderer has no Node access', async () => {
   const [hasNode, hasApi] = await page.evaluate(() => [
     'process' in globalThis || 'require' in globalThis,
