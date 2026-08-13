@@ -576,14 +576,28 @@ export class ColumnEngine implements ReaderEngine {
     this.pageCount = this.measure()
     this.page = clampPage(typeof page === 'function' ? page(this.pageCount) : page, this.pageCount)
     this.apply()
+
+    // The @font-face injected by measure() may still be loading. Await it
+    // before the first emit so pagination is final and the position the UI
+    // snapshots is stable across sessions.
+    const doc = this.doc()
+    if (doc?.fonts) {
+      await doc.fonts.ready
+      if (!this.destroyed && this.spineIndex === index) {
+        const settled = this.measure()
+        if (settled !== this.pageCount) {
+          const progression = progressionInItem(this.page, this.pageCount)
+          this.pageCount = settled
+          this.page = pageForProgression(progression, this.pageCount)
+          this.apply()
+        }
+      }
+    }
+
     this.renderAnnotations()
     this.emit(origin)
 
-    // Late web-font settling can change scrollWidth after the first layout.
-    // Re-measure once fonts are ready, preserving the reading position. This
-    // is a layout correction, not reading activity: it always reports
-    // 'relayout', regardless of the origin that loaded the chapter.
-    const doc = this.doc()
+    // Safety net: a late resize or second font swap still gets caught.
     const settledIndex = index
     void doc?.fonts?.ready.then(() => {
       if (!this.destroyed && this.spineIndex === settledIndex) this.relayout()

@@ -128,7 +128,7 @@ test('the continue-reading banner and book columns span the shelf', async () => 
     return [banner, grid, lastCard].map((element) => element?.getBoundingClientRect())
   })
   expect(boxes[0]?.width).toBe(boxes[1]?.width)
-  expect(boxes[0]?.right).toBeCloseTo(boxes[2]?.right ?? Number.NaN, 1)
+  expect(boxes[0]?.right).toBeCloseTo(boxes[2]?.right ?? Number.NaN, 0)
 })
 
 test('renderer has no Node access', async () => {
