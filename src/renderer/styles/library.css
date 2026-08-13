@@ -504,10 +504,11 @@
 .continue-reading {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 24px;
-  height: 320px;
-  padding: 28px 30px;
+  width: 100%;
+  height: 240px;
+  padding: 20px 24px;
   border: 1px solid var(--border);
   border-radius: 18px;
   /* Plain fallback beneath .continue-bg, visible only for the instant
@@ -637,7 +638,6 @@
   position: relative;
   z-index: 1;
   flex: none;
-  align-self: flex-end;
   padding: 12px 26px;
   border-radius: 999px;
   background: var(--accent);
@@ -656,7 +656,8 @@
    squeezed out. */
 @media (max-width: 720px) {
   .continue-reading {
-    height: 240px;
+    height: 200px;
+    padding: 16px 20px;
   }
 
   .continue-resume {
