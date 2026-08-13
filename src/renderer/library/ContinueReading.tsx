@@ -5,8 +5,9 @@ import { coverFor } from './covers'
 /**
  * "Continue reading" banner: the shelf with whatever you were last reading
  * on top. It is the thing on the library screen you are most likely to
- * click, so it gets a full-size cover and the width of the window rather
- * than a thin strip above the grid.
+ * click, so it's a hero card the width of the window — its own cover,
+ * blurred and darkened, fills the background — rather than a thin strip
+ * above the grid.
  */
 
 export function ContinueReading(props: { book: Book | null; onOpen: () => void }): JSX.Element {
@@ -17,6 +18,8 @@ export function ContinueReading(props: { book: Book | null; onOpen: () => void }
     <Show when={props.book}>
       {(book) => (
         <button type="button" class="continue-reading" onClick={props.onOpen}>
+          <div class="continue-bg" style={{ 'background-image': `url(${coverFor(book())})` }} />
+          <div class="continue-scrim" />
           <img
             class="continue-cover"
             src={coverFor(book())}

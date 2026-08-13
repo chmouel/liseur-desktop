@@ -504,19 +504,15 @@
 .continue-reading {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 24px;
-  padding: 22px 26px;
+  height: 320px;
+  padding: 28px 30px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  /* A warm sweep from the palette rather than from the book: a blurred
-     cover tints the card a different colour for every book, and most of
-     them turn to grey mud behind the text. */
-  background: linear-gradient(
-    100deg,
-    var(--bg-elevated) 0%,
-    color-mix(in srgb, var(--accent-soft) 55%, var(--bg-elevated)) 100%
-  );
+  /* Plain fallback beneath .continue-bg, visible only for the instant
+     before the cover image decodes. */
+  background: var(--bg-elevated);
   cursor: pointer;
   text-align: left;
   overflow: hidden;
@@ -531,12 +527,34 @@
   box-shadow: 0 6px 20px var(--shadow);
 }
 
+/* Oversized and heavily blurred/darkened: this hides the blur's soft edge
+   inside the card and keeps text legible no matter how bright or busy the
+   cover art is (a lightly-tinted flat background used to sit here instead,
+   because a blurred cover alone tended to read as grey mud — the scrim
+   below is what makes bringing the art back work). */
+.continue-bg {
+  position: absolute;
+  inset: -20px;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(32px) brightness(0.55) saturate(1.1);
+}
+
+.continue-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.15) 60%, rgba(0, 0, 0, 0) 100%);
+}
+
 .continue-cover {
   position: relative;
   z-index: 1;
+  flex: none;
   border-radius: 8px;
   object-fit: cover;
-  box-shadow: 0 4px 16px var(--shadow);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .continue-body {
@@ -554,14 +572,19 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--accent);
+  /* Fixed light color, not var(--accent): this text sits on a photo
+     scrim that ignores the light/dark theme, so it needs its own
+     always-legible palette instead of the themed tokens. */
+  color: #f0cba8;
 }
 
 .continue-title {
   font-family: Georgia, serif;
-  font-size: 30px;
+  font-size: 32px;
   line-height: 1.2;
   margin-top: 2px;
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   /* Two lines, then ellipsis: long series titles are the norm. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -570,7 +593,7 @@
 }
 
 .continue-author {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.75);
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -582,28 +605,26 @@
   align-items: center;
   gap: 12px;
   margin-top: 18px;
-  max-width: 620px;
 }
 
 .continue-progress {
   flex: 1;
   height: 8px;
   border-radius: 4px;
-  background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: rgba(255, 255, 255, 0.25);
   overflow: hidden;
 }
 
 .continue-progress-fill {
   height: 100%;
   border-radius: 4px;
-  background: var(--progress);
+  background: #ffffff;
 }
 
 .continue-percent {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.75);
   font-variant-numeric: tabular-nums;
 }
 
@@ -611,23 +632,28 @@
   position: relative;
   z-index: 1;
   flex: none;
-  align-self: center;
+  align-self: flex-end;
   padding: 12px 26px;
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 2px 8px var(--shadow);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .continue-reading:hover .continue-resume {
   background: var(--accent-strong);
 }
 
-/* Narrow windows: the pill is the first thing to go, then the cover
-   shrinks. The title must never be the thing that gets squeezed out. */
+/* Narrow windows: the pill is the first thing to go, then the card
+   shrinks back down. The title must never be the thing that gets
+   squeezed out. */
 @media (max-width: 720px) {
+  .continue-reading {
+    height: 240px;
+  }
+
   .continue-resume {
     display: none;
   }
