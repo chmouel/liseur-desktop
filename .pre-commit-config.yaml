@@ -11,7 +11,7 @@
 # runs on this machine every time you commit, and this project treats that
 # with the same suspicion as any other dependency (see SECURITY.md).
 
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-push]
 
 repos:
   - repo: local
