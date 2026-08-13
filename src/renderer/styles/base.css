@@ -15,7 +15,7 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   font-family:
     'Inter',

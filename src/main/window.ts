@@ -31,6 +31,22 @@ export function createMainWindow(): BrowserWindow {
       webviewTag: false,
     },
   }
+
+  // Frosted-glass window on macOS: the OS blurs whatever is behind the
+  // window and shows it through the translucent surfaces the renderer
+  // paints. It's a macOS-only compositor feature; other platforms fall
+  // back to the solid backgroundColor above, and the renderer's own
+  // backdrop-filter still frosts in-app layers there.
+  if (process.platform === 'darwin') {
+    options.vibrancy = 'sidebar'
+    // Keep the vibrancy live even when the window is not focused; without
+    // this macOS greys it out the moment you click away.
+    options.visualEffectState = 'active'
+    // A translucent surface needs the fill behind it to be transparent, or
+    // the solid backgroundColor sits on top of the blur and hides it.
+    options.backgroundColor = '#00000000'
+  }
+
   if (state.x !== undefined) options.x = state.x
   if (state.y !== undefined) options.y = state.y
 

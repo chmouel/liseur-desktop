@@ -4,6 +4,12 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* Translucent app surface: the macOS window vibrancy shows through, and
+     on other platforms a backdrop blur frosts whatever sits behind. The
+     reader is opaque paper, so this lives on the shelf, not on the root. */
+  background: var(--bg-app);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 /* --- Top bar --- */
@@ -14,7 +20,7 @@
   gap: 20px;
   padding: 16px 28px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: transparent;
   -webkit-app-region: drag; /* native-feeling window dragging */
 }
 
@@ -251,7 +257,9 @@
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-glass-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: 0 8px 24px var(--shadow);
 }
 
@@ -314,7 +322,9 @@
   max-width: 92vw;
   max-height: 80vh;
   overflow-y: auto;
-  background: var(--bg);
+  background: var(--bg-glass-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 16px 48px var(--shadow);
@@ -509,11 +519,14 @@
   width: 100%;
   height: 240px;
   padding: 20px 24px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
-  /* Plain fallback beneath .continue-bg, visible only for the instant
-     before the cover image decodes. */
-  background: var(--bg-elevated);
+  /* Frosted-glass panel, Codex-desktop style: a translucent fill plus a
+     backdrop blur so the shelf behind the card shows through softly. The
+     cover-art layer below adds a faint tint on top of that. */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   cursor: pointer;
   text-align: left;
   overflow: hidden;
@@ -540,6 +553,7 @@
   background-size: cover;
   background-position: center;
   filter: blur(32px) brightness(0.55) saturate(1.1);
+  opacity: 0.65;
 }
 
 .continue-scrim {
@@ -805,7 +819,9 @@
   max-width: 92vw;
   max-height: 80vh;
   overflow-y: auto;
-  background: var(--bg);
+  background: var(--bg-glass-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 16px 48px var(--shadow);

@@ -41,6 +41,13 @@
   --progress: var(--teal);
   --danger: #a33b2e;
   --shadow: rgb(21 17 12 / 0.08);
+  /* Frosted-glass surfaces: a translucent app background that lets the
+     macOS window vibrancy (and the renderer's own backdrop-filter) show
+     through, plus lighter fills for panels and menus floating on top. */
+  --bg-app: rgb(255 255 255 / 0.62);
+  --bg-glass: rgb(255 255 255 / 0.55);
+  --bg-glass-strong: rgb(250 247 242 / 0.82);
+  --glass-blur: blur(30px) saturate(1.6);
 }
 
 [data-theme='dark'] {
@@ -62,6 +69,10 @@
   --progress: var(--teal-light);
   --danger: #e07a6a;
   --shadow: rgb(0 0 0 / 0.4);
+  --bg-app: rgb(23 19 14 / 0.6);
+  --bg-glass: rgb(33 27 20 / 0.5);
+  --bg-glass-strong: rgb(23 19 14 / 0.82);
+  --glass-blur: blur(30px) saturate(1.6);
 }
 
 /* White on white: the reader's chrome is the same paper as the page. */
