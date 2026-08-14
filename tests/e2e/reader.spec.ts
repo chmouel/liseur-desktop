@@ -76,7 +76,7 @@ test('opens, paginates, persists and restores progress', async () => {
     // TOC navigation is user-originated: it publishes immediately (no
     // debounce), so the close-time handshake below persists this exact
     // position without needing to wait for it to land first.
-    const atChapter3 = await page.locator('.reader-footer').textContent()
+    const atChapter3 = await page.locator('.reader-chapter').textContent()
 
     // Close → Continue Reading shows the book; progress persisted.
     await page.keyboard.press('Escape')
@@ -104,7 +104,7 @@ test('opens, paginates, persists and restores progress', async () => {
     await page.waitForSelector('.reader-screen')
     await expect(iframe.locator('h1')).toHaveText('Chapter 3', { timeout: 10_000 })
     await expect
-      .poll(() => page.locator('.reader-footer').textContent(), { timeout: 10_000 })
+      .poll(() => page.locator('.reader-chapter').textContent(), { timeout: 10_000 })
       .toBe(atChapter3)
   } finally {
     await app.close()
