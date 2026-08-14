@@ -13,11 +13,11 @@ cask "liseur" do
   os macos: "mac", linux: "linux"
   extension = on_system_conditional macos: "dmg", linux: "AppImage"
 
-  version "0.3.0"
-  sha256 arm:          "ade6b85e9d5ea492696e0e79237fd0f295227553d1b50efedb15a1e5ddbc88a5",
-         intel:        "4889c40c8b2e4b499cb2ec8cc415ac446707ee6e5ca909a3893d41e1a8d8e838",
-         arm64_linux:  "f9ae81c132287f5f06e8e9fa4c4b291f8817ab1b0cecc4d78d24c45192c94de8",
-         x86_64_linux: "c3e9d2be096538445ae8641eb10dc7c171564361f2342385e1f34022339d4404"
+  version "0.4.0"
+  sha256 arm:          "bec2f2bcc59e44bb365d9a9422c27f54588ac203c70338c641eba70389e61e35",
+         intel:        "48eef8c9ff9b27b5473e4c56e62cd381cd27dbb742404da32923c983fe7fd410",
+         arm64_linux:  "18acf80a4575da281e2e3235d43d80ccd918104fb0028b15ffb62d033e43dd22",
+         x86_64_linux: "544596c7075bfbe949f11cce1f8c43c44d9328c6534eced2d2ee5100cf349520"
 
   on_macos do
     depends_on macos: :monterey
