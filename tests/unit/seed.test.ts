@@ -47,8 +47,8 @@ describe('seedLibraryIfEmpty', () => {
       const result = service.query(q, 1)
       const elapsed = performance.now() - start
       expect(result.books.length).toBeGreaterThan(0)
-      // Generous CI bound; dev machines measure single-digit ms.
-      expect(elapsed).toBeLessThan(250)
+      // Bound sized for noisy shared CI runners; dev machines measure single-digit ms.
+      expect(elapsed).toBeLessThan(500)
     }
     expect(service.continueReading()).not.toBeNull()
   })
