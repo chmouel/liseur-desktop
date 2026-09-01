@@ -24,6 +24,12 @@ cask "liseur" do
 
     app "Liseur.app"
 
+    postflight do
+      system_command "/usr/bin/xattr",
+                     args: ["-dr", "com.apple.quarantine", "#{appdir}/Liseur.app"],
+                     sudo: false
+    end
+
     # Nothing here is written unless you run the application, and none of it
     # comes back once removed: the library index, the reading positions and
     # the annotations all live in the first of these.
@@ -39,13 +45,8 @@ cask "liseur" do
       project, and the release carries build provenance instead, which says
       where a file came from rather than who paid for it.
 
-      Homebrew quarantines what it downloads, and macOS refuses to open a
-      quarantined application that carries no signature. Clear the flag once:
-
-        xattr -dr com.apple.quarantine "#{appdir}/Liseur.app"
-
-      Passing --no-quarantine to `brew install` avoids the step, at the cost
-      of exempting the download from Gatekeeper before you have seen it.
+      The quarantine flag is cleared automatically during install so macOS
+      will not block the application from opening.
     EOS
   end
   on_linux do
