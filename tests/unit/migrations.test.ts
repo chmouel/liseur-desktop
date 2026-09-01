@@ -160,6 +160,44 @@ describe('migrate', () => {
     db.close()
   })
 
+  it('keeps catalog editions that resolve to the same liseur-sync work', () => {
+    const db = openDatabase(':memory:')
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < 9),
+    )
+    db.prepare(
+      `INSERT INTO remote_servers (id, type, name, url, added_at)
+       VALUES ('sync', 'liseur-sync', 'Sync', 'https://sync.test', 1)`,
+    ).run()
+    for (const id of ['book-1', 'book-2']) {
+      db.prepare(
+        `INSERT INTO books (id, title, authors, finished, archived, downloaded, added_at)
+         VALUES (?, ?, '[]', 0, 0, 0, 1)`,
+      ).run(id, id)
+    }
+    db.prepare(
+      `INSERT INTO server_book_links (server_id, book_id, remote_id)
+       VALUES ('sync', 'book-1', 'work-1')`,
+    ).run()
+
+    migrate(db, MIGRATIONS)
+    db.prepare(
+      `INSERT INTO server_book_links (server_id, book_id, remote_id)
+       VALUES ('sync', 'book-2', 'work-1')`,
+    ).run()
+
+    expect(
+      db
+        .prepare(
+          `SELECT book_id FROM server_book_links
+           WHERE server_id = 'sync' AND remote_id = 'work-1' ORDER BY book_id`,
+        )
+        .all(),
+    ).toEqual([{ book_id: 'book-1' }, { book_id: 'book-2' }])
+    db.close()
+  })
+
   it('waits for a locked database instead of failing the query', () => {
     // Without a busy timeout, a database locked for even a moment (a WAL
     // checkpoint, a second connection mid-write) makes queries throw, and a

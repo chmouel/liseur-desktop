@@ -13,11 +13,11 @@ import type {
 import type { WorkIdentifier } from './work-identifiers'
 
 /**
- * liseur-sync: the sync-first companion server (no catalog — it syncs
- * progress and reading sessions for books obtained elsewhere). Mirrors the
- * Android client (data/liseursync/*): bearer token minted at setup, ops push
- * via POST /v1/ops, catch-up pull via GET /v1/changes (410 → resync from
- * /v1/heads), works resolved via POST /v1/works/resolve.
+ * liseur-sync: its native catalog, positions and reading sessions. Mirrors
+ * the Android client (data/liseursync/*): catalog pages are walked folder by
+ * folder, bearer tokens are minted at setup, ops push via POST /v1/ops,
+ * catch-up pull via GET /v1/changes (410 → resync from /v1/heads), and local
+ * books resolve through POST /v1/works/resolve.
  *
  * Endpoint shapes are implemented to the same contract the Android app uses;
  * any mismatch shows up in the mocked unit tests first, real-server testing
@@ -63,6 +63,53 @@ function numberOrZero(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
+const CATALOG_PAGE_SIZE = 200
+const MAX_CATALOG_PAGES = 200
+
+interface CatalogBookPayload {
+  book_id?: unknown
+  title?: unknown
+  contributors?: unknown
+  size_bytes?: unknown
+  cover_url?: unknown
+}
+
+function catalogBook(payload: CatalogBookPayload): RemoteBook | null {
+  const remoteId = typeof payload.book_id === 'string' ? payload.book_id : ''
+  const title = typeof payload.title === 'string' ? payload.title.trim() : ''
+  if (!remoteId || !title) return null
+  const authors = Array.isArray(payload.contributors)
+    ? payload.contributors.flatMap((contributor) => {
+        if (
+          !contributor ||
+          typeof contributor !== 'object' ||
+          (contributor as { role?: unknown }).role !== 'author' ||
+          typeof (contributor as { name?: unknown }).name !== 'string'
+        ) {
+          return []
+        }
+        const name = (contributor as { name: string }).name.trim()
+        return name ? [name] : []
+      })
+    : []
+  const sizeBytes =
+    typeof payload.size_bytes === 'number' &&
+    Number.isFinite(payload.size_bytes) &&
+    payload.size_bytes > 0
+      ? payload.size_bytes
+      : undefined
+  const coverUrl =
+    typeof payload.cover_url === 'string' && payload.cover_url ? payload.cover_url : undefined
+  return {
+    remoteId,
+    title,
+    authors,
+    sizeBytes,
+    downloadUrl: `/v1/books/${encodeURIComponent(remoteId)}/download`,
+    ...(coverUrl ? { coverUrl } : {}),
+  }
+}
+
 export class LiseurSyncCatalog implements RemoteCatalog {
   private readonly http: Http
   /**
@@ -77,6 +124,7 @@ export class LiseurSyncCatalog implements RemoteCatalog {
     authHeaders: Record<string, string>,
     fetchImpl?: ConstructorParameters<typeof Http>[2],
     insightsToken?: string,
+    private readonly catalogEnabled = false,
   ) {
     this.http = new Http(server.url, authHeaders, fetchImpl)
     this.insightsHttp = insightsToken
@@ -96,17 +144,104 @@ export class LiseurSyncCatalog implements RemoteCatalog {
     return { ok: true }
   }
 
-  // No catalog capability: liseur-sync is progress sync only.
   async *listBooks(): AsyncIterable<RemoteBook[]> {
-    if (false as boolean) yield [] // never; satisfies the async-iterable contract
+    if (!this.catalogEnabled) return
+
+    let after: string | undefined
+    for (let folderPage = 0; folderPage < MAX_CATALOG_PAGES; folderPage += 1) {
+      const folders = await this.http.getJson<{
+        folders?: Array<{ folder_id?: unknown }>
+        next_after?: unknown
+      }>(
+        `/v1/folders?limit=${CATALOG_PAGE_SIZE}${
+          after ? `&after=${encodeURIComponent(after)}` : ''
+        }`,
+      )
+      if (!folders.ok || !folders.value) {
+        throw new Error(folders.error ?? `catalog folders failed: HTTP ${folders.status}`)
+      }
+      if (!Array.isArray(folders.value.folders))
+        throw new Error('catalog folders answered invalid JSON')
+
+      for (const folder of folders.value.folders) {
+        const folderId = typeof folder?.folder_id === 'string' ? folder.folder_id : ''
+        if (!folderId) continue
+        let cursor: string | undefined
+        for (let page = 0; page < MAX_CATALOG_PAGES; page += 1) {
+          const listing = await this.http.getJson<{
+            books?: CatalogBookPayload[]
+            next_cursor?: unknown
+          }>(
+            `/v1/folders/${encodeURIComponent(folderId)}/books?limit=${CATALOG_PAGE_SIZE}${
+              cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+            }`,
+          )
+          if (!listing.ok || !listing.value) {
+            throw new Error(listing.error ?? `catalog listing failed: HTTP ${listing.status}`)
+          }
+          if (!Array.isArray(listing.value.books)) {
+            throw new Error('catalog listing answered invalid JSON')
+          }
+          const books = listing.value.books
+            .map(catalogBook)
+            .filter((book): book is RemoteBook => book !== null)
+          if (books.length > 0) yield books
+
+          const next =
+            typeof listing.value.next_cursor === 'string' && listing.value.next_cursor
+              ? listing.value.next_cursor
+              : undefined
+          if (!next) break
+          if (listing.value.books.length === 0) {
+            throw new Error('catalog listing returned an empty page with a next cursor')
+          }
+          cursor = next
+          if (page === MAX_CATALOG_PAGES - 1) throw new Error('catalog page limit reached')
+        }
+      }
+
+      const next =
+        typeof folders.value.next_after === 'string' && folders.value.next_after
+          ? folders.value.next_after
+          : undefined
+      if (!next) return
+      after = next
+      if (folderPage === MAX_CATALOG_PAGES - 1) throw new Error('catalog folder page limit reached')
+    }
   }
 
-  async download(): Promise<Buffer> {
-    throw new Error('liseur-sync has no catalog downloads')
+  async download(book: RemoteBook): Promise<Buffer> {
+    const res = await this.http.request('GET', book.downloadUrl, { timeoutMs: 120_000 })
+    if (!res.ok || !res.value) throw new Error(res.error ?? `download failed: HTTP ${res.status}`)
+    return res.value.bytes()
   }
 
-  async fetchCover(): Promise<Buffer | null> {
-    return null
+  async fetchCover(book: RemoteBook): Promise<Buffer | null> {
+    if (!book.coverUrl) return null
+    const res = await this.http.request('GET', book.coverUrl)
+    if (res.status === 404 || res.status === 204) return null
+    if (!res.ok || !res.value)
+      throw new Error(res.error ?? `cover fetch failed: HTTP ${res.status}`)
+    return res.value.bytes()
+  }
+
+  /**
+   * A liseur-sync catalog book already has authoritative identifiers on the
+   * server, even before this device downloads it. Resolve it by catalog id;
+   * using the generic work endpoint here would lose that advantage.
+   */
+  async resolveCatalogBook(remoteBookId: string): Promise<string | null> {
+    const res = await this.http.request(
+      'POST',
+      `/v1/books/${encodeURIComponent(remoteBookId)}/resolve`,
+      {
+        body: '{}',
+        headers: { 'content-type': 'application/json' },
+      },
+    )
+    if (!res.ok || !res.value) return null
+    const data = await res.value.json<{ work_id?: string }>()
+    return data.work_id ?? null
   }
 
   /**
@@ -340,7 +475,10 @@ export async function liseurSyncLogin(
   username: string,
   password: string,
   fetchImpl?: ConstructorParameters<typeof Http>[2],
-): Promise<{ ok: true; token: string; insightsToken?: string } | { ok: false; detail: string }> {
+): Promise<
+  | { ok: true; token: string; catalogEnabled: boolean; insightsToken?: string }
+  | { ok: false; detail: string }
+> {
   const http = new Http(serverUrl, {}, fetchImpl)
   const login = await http.request('POST', '/v1/login', {
     body: JSON.stringify({ username, password }),
@@ -354,14 +492,14 @@ export async function liseurSyncLogin(
 
   const mintWith = new Http(serverUrl, { authorization: `Bearer ${session.auth_token}` }, fetchImpl)
   const mint = await mintWith.request('POST', '/v1/tokens', {
-    body: JSON.stringify({ name: 'liseur-desktop', scope: 'sync' }),
+    body: JSON.stringify({ name: 'liseur-desktop', scopes: ['sync', 'library-read'] }),
     headers: { 'content-type': 'application/json' },
   })
   if (!mint.ok || !mint.value) return { ok: false, detail: await describe('device token', mint) }
   // The server shows the device secret exactly once, as `secret`
   // (internal/api/routes.go, HandleCreateToken). `token` is accepted too so
   // an older server is not left stranded.
-  const data = await mint.value.json<{ secret?: string; token?: string }>()
+  const data = await mint.value.json<{ secret?: string; token?: string; scopes?: unknown }>()
   const token = data.secret ?? data.token
   if (!token) return { ok: false, detail: 'device token came back empty' }
 
@@ -383,7 +521,9 @@ export async function liseurSyncLogin(
     // No statistics token; positions still sync.
   }
 
-  return { ok: true, token, ...(insightsToken ? { insightsToken } : {}) }
+  const catalogEnabled =
+    Array.isArray(data.scopes) && data.scopes.some((scope) => scope === 'library-read')
+  return { ok: true, token, catalogEnabled, ...(insightsToken ? { insightsToken } : {}) }
 }
 
 /**

@@ -175,6 +175,7 @@ export class SyncService {
               credentials.headers,
               this.deps.fetchImpl,
               credentials.extra?.['insightsToken'],
+              credentials.extra?.['liseurCatalog'] === 'true',
             )
     this.catalogs.set(serverId, catalog)
     return catalog
@@ -228,9 +229,10 @@ export class SyncService {
             this.repository.removeServer(server.id)
             return { server: this.serverInfo(server), test: { ok: false, detail: login.detail } }
           }
+          if (login.catalogEnabled) extra = { liseurCatalog: 'true' }
           // The statistics scope is deliberately separate on the server, so
           // a token that may sync cannot read a reader's history.
-          if (login.insightsToken) extra = { insightsToken: login.insightsToken }
+          if (login.insightsToken) extra = { ...extra, insightsToken: login.insightsToken }
           headers = { authorization: `Bearer ${login.token}` }
           break
         }
@@ -391,6 +393,12 @@ export class SyncService {
 
   /** All books tracked with a server: catalog rows plus liseur-sync links. */
   private trackedBooks(serverId: string): { bookId: string; remoteId: string }[] {
+    if (this.repository.getServer(serverId)?.type === 'liseur-sync') {
+      // liseur-sync changes, sessions and insights are addressed by work id,
+      // while its catalog rows are addressed by catalog book id. The link is
+      // the only safe conversion between the two.
+      return this.repository.linkedBookIds(serverId)
+    }
     const catalogRows = this.db
       .prepare(
         'SELECT id AS bookId, remote_id AS remoteId FROM books WHERE server_id = ? AND remote_id IS NOT NULL',
@@ -544,13 +552,17 @@ export class SyncService {
       if (linked.has(candidate.id)) continue
       const book = this.books.getById(candidate.id)
       if (!book) continue
-      const identity = this.identityOf(book)
+      const catalogBookId =
+        book.serverId === catalog.server.id && book.remoteId ? book.remoteId : undefined
+      const identity = catalogBookId ? undefined : this.identityOf(book)
       // Nothing to say for itself: a name would be this device's alone.
-      if (identity.identifiers.length === 0) continue
+      if (!catalogBookId && identity!.identifiers.length === 0) continue
       budget -= 1
       let workId: string | null
       try {
-        workId = await catalog.resolveWorkId(identity)
+        workId = catalogBookId
+          ? await catalog.resolveCatalogBook(catalogBookId)
+          : await catalog.resolveWorkId(identity!)
       } catch (err) {
         // The server is unreachable; the rest of the library will not fare
         // better, and the books keep their place in the queue for next time.
@@ -755,18 +767,18 @@ export class SyncService {
         const head = await catalog.heads()
         if (head === null) return
         for (const op of head.ops) {
-          const bookId = this.repository.linkedBookId(server.id, op.work_id)
-          if (!bookId) continue
-          await this.reconcileRemoteRecord(
-            bookId,
-            {
-              progression: op.progression,
-              locator: op.locator,
-              updatedAt: Date.parse(op.client_ts) || undefined,
-            },
-            this.dirtyFor(bookId, server.id, queued),
-            { serverId: server.id, remoteId: op.work_id },
-          )
+          for (const bookId of this.repository.linkedBookIdsForRemote(server.id, op.work_id)) {
+            await this.reconcileRemoteRecord(
+              bookId,
+              {
+                progression: op.progression,
+                locator: op.locator,
+                updatedAt: Date.parse(op.client_ts) || undefined,
+              },
+              this.dirtyFor(bookId, server.id, queued),
+              { serverId: server.id, remoteId: op.work_id },
+            )
+          }
         }
         this.repository.setCursor(server.id, head.cursor)
         return
@@ -775,8 +787,7 @@ export class SyncService {
 
       let maxSeq = 0
       for (const op of changes.ops) {
-        const bookId = this.repository.linkedBookId(server.id, op.work_id)
-        if (bookId) {
+        for (const bookId of this.repository.linkedBookIdsForRemote(server.id, op.work_id)) {
           // The op carries the position — no extra round trip needed.
           await this.reconcileRemoteRecord(
             bookId,
@@ -1050,7 +1061,10 @@ export class SyncService {
       if (book.serverId && book.remoteId && servers.some((s) => s.id === book.serverId)) {
         required.push({
           serverId: book.serverId,
-          remoteId: book.remoteId,
+          remoteId:
+            this.repository.getServer(book.serverId)?.type === 'liseur-sync'
+              ? this.repository.linkedRemoteId(book.serverId, book.id)
+              : book.remoteId,
           catalog: this.catalogFor(book.serverId) ?? undefined,
         })
       }
@@ -1078,7 +1092,10 @@ export class SyncService {
         if (!catalog) continue // credentials pending: un-acked, row survives
         let remoteId = target.remoteId
         if (!remoteId && catalog instanceof LiseurSyncCatalog) {
-          const workId = await catalog.resolveWorkId(this.identityOf(book))
+          const workId =
+            book.serverId === target.serverId && book.remoteId
+              ? await catalog.resolveCatalogBook(book.remoteId)
+              : await catalog.resolveWorkId(this.identityOf(book))
           if (workId) {
             this.repository.link(target.serverId, row.bookId, workId)
             remoteId = workId

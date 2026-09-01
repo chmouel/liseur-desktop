@@ -260,4 +260,19 @@ export const MIGRATIONS: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 9,
+    name: 'allow several editions per sync work',
+    up: (db) => {
+      // A liseur-sync work is a reading identity, not a catalog-file id. Two
+      // catalog books can therefore resolve to the same work (for example,
+      // duplicate files in separate watched folders). The old unique index
+      // made the second resolution fail even though the server accepts both
+      // user_book_works mappings.
+      db.exec(`
+        DROP INDEX idx_links_remote;
+        CREATE INDEX idx_links_remote ON server_book_links(server_id, remote_id);
+      `)
+    },
+  },
 ]

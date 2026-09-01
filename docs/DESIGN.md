@@ -14,7 +14,12 @@ feature completeness. See `PERFORMANCE.md` for the concrete budgets and
 The Android app (`~/git/perso/liseur`) defines the product model: local-first
 EPUB library, calibre-web / Komga / liseur-sync integration, exact Readium
 locators, bookmarks/highlights/notes, reading statistics, typography
-configuration, sync conflict handling.
+configuration, sync conflict handling. liseur-sync catalog reads walk its
+granted watched folders in the worker, stream book rows page by page, and
+fetch only the cover a visible card requests; catalog books resolve to sync
+works through the server's book-resolution route before positions or
+sessions are exchanged. Multiple catalog editions may resolve to one work;
+each retains its catalog row while receiving that work's reading state.
 
 Branding — "paper & ink" palette:
 

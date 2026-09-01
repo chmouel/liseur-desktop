@@ -108,11 +108,14 @@ export class SyncRepository {
     return row?.remote_id
   }
 
-  linkedBookId(serverId: string, remoteId: string): string | undefined {
-    const row = this.db
-      .prepare('SELECT book_id FROM server_book_links WHERE server_id = ? AND remote_id = ?')
-      .get(serverId, remoteId) as { book_id: string } | undefined
-    return row?.book_id
+  linkedBookIdsForRemote(serverId: string, remoteId: string): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT book_id FROM server_book_links
+         WHERE server_id = ? AND remote_id = ? ORDER BY book_id`,
+      )
+      .all(serverId, remoteId) as unknown as { book_id: string }[]
+    return rows.map((row) => row.book_id)
   }
 
   linkedBookIds(serverId: string): { bookId: string; remoteId: string }[] {

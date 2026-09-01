@@ -1028,7 +1028,10 @@ describe('SyncService against mock Komga', () => {
       '/sync/v1/tokens',
       '/sync/v1/changes',
     ])
-    expect(requests[1]?.body).toEqual({ name: 'liseur-desktop', scope: 'sync' })
+    expect(requests[1]?.body).toEqual({
+      name: 'liseur-desktop',
+      scopes: ['sync', 'library-read'],
+    })
     // The statistics routes refuse a sync token by design, so setup asks for
     // the narrower second credential too.
     expect(requests[2]?.body).toEqual({
@@ -1037,6 +1040,129 @@ describe('SyncService against mock Komga', () => {
     })
     // The device secret, not the hour-long login credential.
     expect(Object.values(secrets)[0]?.['authorization']).toBe('Bearer device-secret')
+  })
+
+  it('streams the liseur-sync catalog across folders and pages', async () => {
+    const requests: string[] = []
+    const fetchImpl: FetchLike = async (url, init) => {
+      const request = new URL(url)
+      requests.push(`${request.pathname}${request.search}`)
+      const path = request.pathname
+      if (path === '/v1/login') return jsonResponse({ auth_token: 'login-secret' })
+      if (path === '/v1/tokens') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { scope?: string; scopes?: string[] }
+        if (body.scope === 'read-insights') return jsonResponse({ secret: 'stats-secret' }, 201)
+        return jsonResponse({ secret: 'device-secret', scopes: body.scopes }, 201)
+      }
+      if (path === '/v1/changes') {
+        return jsonResponse({
+          ops: [
+            {
+              work_id: 'work-shared',
+              progression: 0.5,
+              locator: { href: 'chapter.xhtml' },
+              client_ts: new Date(Date.now() - 1_000).toISOString(),
+              seq: 1,
+            },
+          ],
+          high_water: '1',
+        })
+      }
+      if (path === '/v1/folders') {
+        return request.searchParams.get('after') === 'folder-2'
+          ? jsonResponse({ folders: [{ folder_id: 'folder-2' }] })
+          : jsonResponse({
+              folders: [{ folder_id: 'folder-1' }],
+              next_after: 'folder-2',
+            })
+      }
+      if (path === '/v1/folders/folder-1/books') {
+        return request.searchParams.get('cursor') === 'second-page'
+          ? jsonResponse({
+              books: [
+                {
+                  book_id: 'book-2',
+                  title: 'Second book',
+                  contributors: [],
+                  size_bytes: 22,
+                  cover_url: '/v1/books/book-2/cover',
+                },
+              ],
+            })
+          : jsonResponse({
+              books: [
+                {
+                  book_id: 'book-1',
+                  title: 'First book',
+                  contributors: [
+                    { name: 'A Writer', role: 'author' },
+                    { name: 'An Editor', role: 'editor' },
+                  ],
+                  size_bytes: 11,
+                  cover_url: '/v1/books/book-1/cover',
+                },
+              ],
+              next_cursor: 'second-page',
+            })
+      }
+      if (path === '/v1/folders/folder-2/books') {
+        return jsonResponse({
+          books: [
+            {
+              book_id: 'book-3',
+              title: 'Third book',
+              contributors: [],
+              size_bytes: 33,
+              cover_url: '',
+            },
+          ],
+        })
+      }
+      if (path.match(/^\/v1\/books\/book-[123]\/resolve$/)) {
+        return jsonResponse({
+          work_id: path.endsWith('book-3/resolve') ? 'work-3' : 'work-shared',
+        })
+      }
+      if (path.match(/^\/v1\/works\/work-(shared|3)\/positions$/)) return jsonResponse({ ops: [] })
+      if (path === '/v1/books/book-1/download') return new Response(new Uint8Array([1, 2, 3]))
+      if (path === '/v1/books/book-1/cover') return new Response(new Uint8Array([4, 5, 6]))
+      return jsonResponse({ error: 'not found' }, 404)
+    }
+
+    const { service } = makeService(fetchImpl)
+    const { server, test } = await service.setupServer({
+      type: 'liseur-sync',
+      name: 'Catalog',
+      url: 'https://sync.test',
+      username: 'reader',
+      secret: 'password',
+    })
+    expect(test.ok).toBe(true)
+    await service.syncNow(server.id)
+
+    const repo = new SyncRepository(db)
+    const first = repo.findByRemoteId(server.id, 'book-1')
+    expect(first).toMatchObject({ title: 'First book', authors: ['A Writer'], downloaded: false })
+    expect(repo.findByRemoteId(server.id, 'book-2')).toBeDefined()
+    expect(repo.findByRemoteId(server.id, 'book-3')).toBeDefined()
+    expect(requests).toContain('/v1/folders?limit=200')
+    expect(requests).toContain('/v1/folders?limit=200&after=folder-2')
+    expect(requests).toContain('/v1/folders/folder-1/books?limit=200&cursor=second-page')
+    expect(requests).toContain('/v1/books/book-1/resolve')
+    expect(new SyncRepository(db).linkedRemoteId(server.id, first!.id)).toBe('work-shared')
+    const second = repo.findByRemoteId(server.id, 'book-2')!
+    expect(new SyncRepository(db).linkedRemoteId(server.id, second.id)).toBe('work-shared')
+    // Distinct catalog entries can name one work. Both retain their shelf
+    // rows and receive changes addressed to that work.
+    expect(first?.progress?.progression).toBeCloseTo(0.5)
+    expect(second.progress?.progression).toBeCloseTo(0.5)
+
+    const downloaded = await service.downloadBook(first!.id)
+    expect(downloaded?.downloaded).toBe(true)
+    service.ensureCover(first!.id)
+    await vi.waitFor(() => expect(new BookRepository(db).getById(first!.id)?.coverId).toBeDefined())
+    expect(requests).toContain('/v1/books/book-1/download')
+    expect(requests).toContain('/v1/books/book-1/cover')
   })
 
   it('names a book to the server the way the phone names it', async () => {
