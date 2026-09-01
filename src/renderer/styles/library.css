@@ -305,6 +305,75 @@
   bottom: 28px;
 }
 
+/* A stack keeps the familiar book silhouette, then earns its own small
+   count marker. The detail still uses the normal virtualized grid. */
+.series-card .book-cover-wrap::before,
+.series-card .book-cover-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 5px -5px -5px 5px;
+  z-index: -1;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+
+.series-card .book-cover-wrap::after {
+  inset: 9px -9px -9px 9px;
+  z-index: -2;
+}
+
+.series-count {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.series-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.series-header h1,
+.series-header p {
+  margin: 0;
+}
+
+.series-header h1 {
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.series-header p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.series-back {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.series-back:hover {
+  background: var(--bg-sunken);
+}
+
 /* --- Settings overlay (M7) --- */
 
 .settings-overlay {

@@ -220,6 +220,7 @@ describe('SyncService against mock Komga', () => {
     const shell = repo.findByRemoteId(server.id, 'book-1')
     expect(shell).toBeDefined()
     expect(shell?.localPath).toBeUndefined()
+    expect(shell?.series).toEqual([{ id: 'remote-sequence', name: 'Remote sequence', position: 1 }])
 
     const downloaded = await service.downloadBook(shell!.id)
     expect(downloaded?.localPath).toContain('downloads')
@@ -1098,6 +1099,7 @@ describe('SyncService against mock Komga', () => {
                     { name: 'A Writer', role: 'author' },
                     { name: 'An Editor', role: 'editor' },
                   ],
+                  series: [{ id: 'expanse', name: 'The Expanse', position: 1, source: 'folder' }],
                   size_bytes: 11,
                   cover_url: '/v1/books/book-1/cover',
                 },
@@ -1142,7 +1144,12 @@ describe('SyncService against mock Komga', () => {
 
     const repo = new SyncRepository(db)
     const first = repo.findByRemoteId(server.id, 'book-1')
-    expect(first).toMatchObject({ title: 'First book', authors: ['A Writer'], downloaded: false })
+    expect(first).toMatchObject({
+      title: 'First book',
+      authors: ['A Writer'],
+      series: [{ id: 'expanse', name: 'The Expanse', position: 1 }],
+      downloaded: false,
+    })
     expect(repo.findByRemoteId(server.id, 'book-2')).toBeDefined()
     expect(repo.findByRemoteId(server.id, 'book-3')).toBeDefined()
     expect(requests).toContain('/v1/folders?limit=200')

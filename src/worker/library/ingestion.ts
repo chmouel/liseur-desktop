@@ -136,6 +136,7 @@ export class IngestionService {
       archived: false,
       downloaded: true, // a local file is by definition on disk
       addedAt: Date.now(),
+      ...(metadata.series ? { series: [metadata.series] } : {}),
     }
     if (coverId) book.coverId = coverId
 

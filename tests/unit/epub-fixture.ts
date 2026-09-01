@@ -86,6 +86,12 @@ export interface FixtureEpubOptions {
   noCover?: boolean
   /** Deflate the large entries to exercise the inflate path. */
   deflate?: boolean
+  /** Calibre's widely used series metadata. */
+  series?: { name: string; position?: number }
+  /** EPUB 3 collection metadata used by non-Calibre publishers. */
+  epubSeries?: { name: string; position?: number }
+  /** Put group-position before belongs-to-collection to exercise OPF ordering. */
+  epubSeriesPositionFirst?: boolean
 }
 
 export function buildEpub(options: FixtureEpubOptions = {}): Buffer {
@@ -96,9 +102,20 @@ export function buildEpub(options: FixtureEpubOptions = {}): Buffer {
     epub2Cover = false,
     noCover = false,
     deflate = false,
+    series,
+    epubSeries,
+    epubSeriesPositionFirst = false,
   } = options
 
   const coverMeta = epub2Cover ? '<meta name="cover" content="cover-img"/>' : ''
+  const seriesMeta = series
+    ? `<meta name="calibre:series" content="${series.name}"/>\n    <meta name="calibre:series_index" content="${series.position ?? ''}"/>`
+    : ''
+  const epubSeriesMeta = epubSeries
+    ? epubSeriesPositionFirst
+      ? `<meta refines="#series" property="group-position">${epubSeries.position ?? ''}</meta>\n    <meta id="series" property="belongs-to-collection">${epubSeries.name}</meta>`
+      : `<meta id="series" property="belongs-to-collection">${epubSeries.name}</meta>\n    <meta refines="#series" property="group-position">${epubSeries.position ?? ''}</meta>`
+    : ''
   const coverProps = epub2Cover ? '' : ' properties="cover-image"'
   const coverItem = noCover
     ? ''
@@ -112,6 +129,8 @@ export function buildEpub(options: FixtureEpubOptions = {}): Buffer {
     <dc:identifier id="bookid">${identifier}</dc:identifier>
     <dc:language>en</dc:language>
     ${coverMeta}
+    ${seriesMeta}
+    ${epubSeriesMeta}
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>

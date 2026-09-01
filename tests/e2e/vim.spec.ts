@@ -139,6 +139,16 @@ test.describe('vim mode on the shelf', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
     await expect(search).toHaveCount(0)
+
+    // q closes the open series view as well as the other shelf overlays.
+    await page.keyboard.press('/')
+    await page.keyboard.type('test sequence')
+    const stack = page.locator('.series-card')
+    await expect(stack).toHaveCount(1)
+    await stack.click()
+    await expect(page.locator('.series-header')).toBeVisible()
+    await page.keyboard.press('q')
+    await expect(page.locator('.series-header')).toHaveCount(0)
   })
 })
 

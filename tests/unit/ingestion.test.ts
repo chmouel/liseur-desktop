@@ -75,6 +75,23 @@ describe('IngestionService.ingestFile', () => {
     expect((outcome as { status: 'added'; book: Book }).book.title).toBe('fallback-name')
   })
 
+  it('persists the series from a Calibre EPUB', async () => {
+    const path = writeEpub('volume.epub', { series: { name: 'The Expanse', position: 2 } })
+    const outcome = await service().ingestFile(path)
+    expect(outcome.status).toBe('added')
+    expect((outcome as { status: 'added'; book: Book }).book.series).toEqual([
+      { name: 'The Expanse', position: 2 },
+    ])
+    expect(
+      new BookRepository(db).query({
+        filter: 'all',
+        sort: 'title',
+        direction: 'asc',
+        search: '',
+      })[0]?.series,
+    ).toEqual([{ name: 'The Expanse', position: 2 }])
+  })
+
   it('skips the exact same file content (duplicate hash)', async () => {
     const a = writeEpub('a.epub')
     const b = join(booksDir, 'b.epub')

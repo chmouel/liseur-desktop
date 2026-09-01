@@ -53,6 +53,12 @@ Library UX conventions carried over from Android:
   a paper-and-leather surface with a faint cover wash in light mode, stronger
   cover artwork in dark mode, spanning the same shelf width as the book row
 - Book card: cover + badges (download/server/finished) + title + author
+- Series with two or more volumes collapse into a stack in the same grid;
+  stacks file alongside standalone books and open to their ordered,
+  virtualized volume grid. A stack is keyed by its normalized name so local
+  and server copies remain together. liseur-sync memberships are preserved
+  in full: a book that belongs to multiple series appears in each relevant
+  stack.
 
 The settings panel belongs to the application shell rather than to the
 library, and paints over whichever screen is showing. Anything scoped to one

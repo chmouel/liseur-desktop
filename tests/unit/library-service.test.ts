@@ -97,6 +97,14 @@ describe('LibraryService.query', () => {
     expect(query({ search: 'LEA' }).books.map((b) => b.id)).toEqual(['c', 'a'])
   })
 
+  it('searches series names without matching JSON field names', () => {
+    new BookRepository(db).insertBooks([
+      book({ id: 'series', title: 'A Book', series: [{ name: 'The Expanse', position: 1 }] }),
+    ])
+    expect(query({ search: 'expanse' }).books.map((b) => b.id)).toEqual(['series'])
+    expect(query({ search: 'position' }).books).toEqual([])
+  })
+
   it('treats LIKE wildcards in search as literal characters', () => {
     expect(query({ search: '%' }).books).toEqual([])
     expect(query({ search: '_' }).books).toEqual([])

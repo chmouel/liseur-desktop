@@ -162,11 +162,12 @@ export class SyncRepository {
       // reconstructable later).
       this.db
         .prepare(
-          'UPDATE books SET title = ?, authors = ?, download_url = ?, cover_url = ? WHERE id = ?',
+          'UPDATE books SET title = ?, authors = ?, series = ?, download_url = ?, cover_url = ? WHERE id = ?',
         )
         .run(
           remote.title,
           JSON.stringify(remote.authors),
+          JSON.stringify(remote.series ?? []),
           remote.downloadUrl,
           remote.coverUrl ?? null,
           existing.id,
@@ -181,8 +182,8 @@ export class SyncRepository {
       .prepare(
         `INSERT INTO books (id, folder_id, title, authors, local_path, remote_id, cover_id,
                             finished, archived, downloaded, added_at, server_id,
-                            download_url, cover_url)
-         VALUES (?, NULL, ?, ?, NULL, ?, NULL, 0, 0, 0, ?, ?, ?, ?)`,
+                            download_url, cover_url, series)
+         VALUES (?, NULL, ?, ?, NULL, ?, NULL, 0, 0, 0, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -193,6 +194,7 @@ export class SyncRepository {
         serverId,
         remote.downloadUrl,
         remote.coverUrl ?? null,
+        JSON.stringify(remote.series ?? []),
       )
     const book = new BookRepository(this.db).getById(id)!
     return { book, added: true }

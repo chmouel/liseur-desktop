@@ -1,4 +1,4 @@
-import type { Locator } from '../../shared/domain/types'
+import type { Locator, SeriesMembership } from '../../shared/domain/types'
 
 /**
  * Remote catalog & sync capability model (M7).
@@ -42,6 +42,8 @@ export interface RemoteBook {
   coverUrl?: string | undefined
   /** Server-reported read progress when available (Komga). */
   progress?: ProgressRecord | undefined
+  /** All effective series memberships the catalog reports. */
+  series?: SeriesMembership[] | undefined
 }
 
 export interface TestResult {

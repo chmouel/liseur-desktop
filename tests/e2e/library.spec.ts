@@ -48,6 +48,35 @@ test('launches and renders the library shell', async () => {
   await expect(page.locator('.book-card').first()).toBeVisible()
 })
 
+test('opens a grouped series stack and returns to the shelf', async () => {
+  await page.getByRole('button', { name: 'Search' }).click()
+  await page.getByRole('searchbox', { name: 'Search books' }).fill('test sequence')
+  const stack = page.locator('.series-card')
+  await expect(stack).toHaveCount(1)
+  await expect(stack).toHaveAccessibleName('The Test Sequence, 2 books')
+
+  await stack.click()
+  await expect(page.locator('.series-header h1')).toHaveText('The Test Sequence')
+  await expect(page.locator('.book-card')).toHaveCount(2)
+
+  // Statistics is above the series view, so Escape dismisses it first.
+  await page.getByRole('button', { name: 'Reading statistics' }).click()
+  await expect(page.locator('.stats-panel')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.stats-panel')).toHaveCount(0)
+  await expect(page.locator('.series-header')).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.series-header')).toHaveCount(0)
+  await expect(page.locator('.series-card')).toHaveCount(1)
+
+  // Tests share the shelf: restore the unfiltered view before the next one
+  // asks it to scroll thousands of rows.
+  await page.getByRole('searchbox', { name: 'Search books' }).fill('')
+  await expect.poll(() => page.locator('.book-card').count()).toBeGreaterThan(2)
+  await page.keyboard.press('Escape')
+})
+
 test('the top bar carries the brand tile and the size of the shelf', async () => {
   // The reading-scene art, matching the Android app's top bar. It must
   // actually decode: a broken import still lays out as an <img>.

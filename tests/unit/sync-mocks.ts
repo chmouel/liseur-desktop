@@ -63,15 +63,27 @@ export function mockKomga(
         {
           id: 'book-1',
           name: 'First Remote',
+          seriesTitle: 'Remote sequence',
+          seriesId: 'remote-sequence',
           sizeBytes: 1000,
-          metadata: { title: 'First Remote', authors: [{ name: 'Remote Author', role: 'writer' }] },
+          metadata: {
+            title: 'First Remote',
+            numberSort: 1,
+            authors: [{ name: 'Remote Author', role: 'writer' }],
+          },
           media: { pagesCount: 10 },
         },
         {
           id: 'book-2',
           name: 'Second Remote',
+          seriesTitle: 'Remote sequence',
+          seriesId: 'remote-sequence',
           sizeBytes: 2000,
-          metadata: { title: 'Second Remote', authors: [{ name: 'Other Author' }] },
+          metadata: {
+            title: 'Second Remote',
+            numberSort: 2,
+            authors: [{ name: 'Other Author' }],
+          },
           media: { pagesCount: 20 },
         },
       ]

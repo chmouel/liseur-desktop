@@ -169,6 +169,11 @@ export function generateFakeLibrary(size = FAKE_LIBRARY_SIZE, seed = FAKE_LIBRAR
       addedAt,
     }
 
+    // A stable pair makes the grouped-shelf behavior observable in the
+    // production-build browser test without changing how real libraries are
+    // seeded or requiring an extra test-only IPC operation.
+    if (i < 2) book.series = [{ name: 'The Test Sequence', position: i + 1 }]
+
     if (rng() < 0.5) {
       book.lastOpenedAt = now - Math.floor(rng() * 60) * day
     }

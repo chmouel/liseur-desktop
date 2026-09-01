@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Book, LibraryQuery, LibraryQueryResult, Locator } from '../../shared/domain/types'
 import { BookRepository } from './book-repository'
+import { groupedLibraryEntries } from './grouping'
 
 /**
  * Library query engine — worker side.
@@ -18,8 +19,12 @@ export class LibraryService {
 
   query(query: LibraryQuery, requestId: number): LibraryQueryResult {
     const books = this.repository.query(query)
+    const groupingBooks = query.search.trim()
+      ? this.repository.query({ ...query, search: '' })
+      : books
     return {
       books,
+      entries: groupedLibraryEntries(groupingBooks, books, query),
       totalCount: books.length,
       archivedCount: this.repository.countArchived(),
       requestId,

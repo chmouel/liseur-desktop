@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, onMount, For, type JSX } from 'solid-js'
-import type { Book } from '@shared/domain/types'
+import type { LibraryEntry } from '@shared/domain/types'
 import { coverFor, requestRemoteCover } from './covers'
 import {
   computeColumns,
@@ -23,10 +23,10 @@ const GAP = GRID_GAP
 const ROW_HEIGHT = GRID_ROW_HEIGHT
 
 interface Props {
-  books: () => Book[]
+  entries: () => LibraryEntry[]
   selectedIndex: () => number
   onSelect: (index: number) => void
-  onOpen: (index: number) => void
+  onOpen: (entry: LibraryEntry, index: number) => void
   gridRef?: (el: HTMLDivElement) => void
   /** Optional content that scrolls away above the grid (e.g. the
       continue-reading banner). Its height is measured, so the row math
@@ -62,7 +62,7 @@ export function VirtualBookGrid(props: Props): JSX.Element {
 
   const range = () =>
     computeRange(
-      props.books().length,
+      props.entries().length,
       columns(),
       ROW_HEIGHT,
       scrollTop(),
@@ -93,7 +93,7 @@ export function VirtualBookGrid(props: Props): JSX.Element {
     }
   })
 
-  const visible = () => props.books().slice(range().start, range().end)
+  const visible = () => props.entries().slice(range().start, range().end)
 
   return (
     <div
@@ -105,7 +105,7 @@ export function VirtualBookGrid(props: Props): JSX.Element {
       onScroll={onScroll}
       role="grid"
       aria-label="Library"
-      aria-rowcount={Math.ceil(props.books().length / columns())}
+      aria-rowcount={Math.ceil(props.entries().length / columns())}
     >
       {/* Always in the tree so one observer registration at mount is
           enough: when the banner is gated off, the wrapper measures 0. */}
@@ -127,8 +127,11 @@ export function VirtualBookGrid(props: Props): JSX.Element {
           }}
         >
           <For each={visible()}>
-            {(book, localIndex) => {
+            {(entry, localIndex) => {
               const index = () => range().start + localIndex()
+              const book = entry.kind === 'series' ? entry.cover : entry.book
+              const title = entry.kind === 'series' ? entry.name : book.title
+              const authors = entry.kind === 'series' ? entry.authors : book.authors
               // Books that live on a server arrive with no cover art. Ask
               // for it as the card is mounted, which virtualization already
               // means is roughly "as it comes into view".
@@ -137,16 +140,23 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                 <button
                   type="button"
                   class="book-card"
-                  classList={{ selected: props.selectedIndex() === index() }}
+                  classList={{
+                    selected: props.selectedIndex() === index(),
+                    'series-card': entry.kind === 'series',
+                  }}
                   // One click opens. Selection still moves so the arrow keys
                   // carry on from wherever the last click landed.
                   onClick={() => {
                     props.onSelect(index())
-                    props.onOpen(index())
+                    props.onOpen(entry, index())
                   }}
                   role="gridcell"
                   aria-selected={props.selectedIndex() === index()}
-                  aria-label={`${book.title} by ${book.authors.join(', ')}`}
+                  aria-label={
+                    entry.kind === 'series'
+                      ? `${entry.name}, ${entry.books.length} books`
+                      : `${book.title} by ${authors.join(', ')}`
+                  }
                 >
                   <div class="book-cover-wrap">
                     <img
@@ -159,6 +169,9 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                       width={CARD_WIDTH}
                       height={GRID_COVER_HEIGHT}
                     />
+                    {entry.kind === 'series' && (
+                      <span class="series-count">{entry.books.length}</span>
+                    )}
                     {book.finished && <span class="badge badge-finished">Finished</span>}
                     {book.downloaded && (
                       <span class="badge badge-downloaded" title="Downloaded">
@@ -171,8 +184,10 @@ export function VirtualBookGrid(props: Props): JSX.Element {
                       </span>
                     )}
                   </div>
-                  <span class="book-title">{book.title}</span>
-                  <span class="book-author">{book.authors.join(', ')}</span>
+                  <span class="book-title">{title}</span>
+                  <span class="book-author">
+                    {entry.kind === 'series' ? `${entry.books.length} books` : authors.join(', ')}
+                  </span>
                 </button>
               )
             }}

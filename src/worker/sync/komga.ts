@@ -22,10 +22,18 @@ const MAX_PAGES = 200
 interface KomgaBookDto {
   id: string
   name?: string
+  seriesTitle?: string
+  seriesId?: string
+  oneshot?: boolean
   sizeBytes?: number
   lastModified?: string
   media?: { pagesCount?: number }
-  metadata?: { title?: string; authors?: { name: string; role?: string }[] }
+  metadata?: {
+    title?: string
+    authors?: { name: string; role?: string }[]
+    numberSort?: number
+    number?: string
+  }
   readProgress?: { page?: number; completed?: boolean; readDate?: string; deviceId?: string }
 }
 
@@ -40,6 +48,14 @@ function parseBook(dto: KomgaBookDto): RemoteBook {
     .map((a) => a.name)
     .filter(Boolean)
   const pages = dto.media?.pagesCount
+  const seriesName = dto.oneshot ? undefined : dto.seriesTitle?.trim() || undefined
+  const number = Number(dto.metadata?.number)
+  const position =
+    typeof dto.metadata?.numberSort === 'number' && Number.isFinite(dto.metadata.numberSort)
+      ? dto.metadata.numberSort
+      : Number.isFinite(number)
+        ? number
+        : undefined
   let progress: RemoteBook['progress']
   if (dto.readProgress && pages && dto.readProgress.page !== undefined) {
     progress = {
@@ -60,6 +76,17 @@ function parseBook(dto: KomgaBookDto): RemoteBook {
     downloadUrl: `/api/v1/books/${dto.id}/file`,
     coverUrl: `/api/v1/books/${dto.id}/thumbnail`,
     progress,
+    ...(seriesName
+      ? {
+          series: [
+            {
+              ...(dto.seriesId ? { id: dto.seriesId } : {}),
+              name: seriesName,
+              ...(position !== undefined ? { position } : {}),
+            },
+          ],
+        }
+      : {}),
   }
 }
 

@@ -15,6 +15,8 @@ export interface EpubMetadata {
   authors: string[]
   /** dc:identifier — ISBN or UUID when present; used for dedupe. */
   identifier?: string | undefined
+  /** Calibre and EPUB 3 collection metadata, when the file supplies it. */
+  series?: { name: string; position?: number | undefined } | undefined
 }
 
 export interface EpubCover {
@@ -89,6 +91,17 @@ function parseOpf(xml: string, opfDir: string): Opf {
   const manifest = new Map<string, ManifestItem>()
   const spine: { idref: string; linear: boolean }[] = []
   let metaCoverId: string | undefined
+  let calibreSeries: string | undefined
+  let calibreSeriesPosition: number | undefined
+  let epubSeries: { id?: string; name?: string; position?: number | undefined } | undefined
+  const epubSeriesPositions = new Map<string, number>()
+  let collectingSeriesMeta:
+    | {
+        property: 'belongs-to-collection' | 'group-position'
+        id?: string | undefined
+        refines?: string | undefined
+      }
+    | undefined
 
   // Depth stack so we only pick up text of the element we're inside.
   const stack: string[] = []
@@ -112,6 +125,21 @@ function parseOpf(xml: string, opfDir: string): Opf {
         if (el.attributes['name'] === 'cover' && el.attributes['content']) {
           metaCoverId = el.attributes['content']
         }
+        if (el.attributes['name'] === 'calibre:series' && el.attributes['content']) {
+          calibreSeries = el.attributes['content'].trim() || undefined
+        }
+        if (el.attributes['name'] === 'calibre:series_index' && el.attributes['content']) {
+          const position = Number(el.attributes['content'])
+          calibreSeriesPosition = Number.isFinite(position) ? position : undefined
+        }
+        const property = el.attributes['property']
+        if (property === 'belongs-to-collection') {
+          collectingSeriesMeta = { property, id: el.attributes['id'] }
+          collector = textCollector()
+        } else if (property === 'group-position' && el.attributes['refines']) {
+          collectingSeriesMeta = { property, refines: el.attributes['refines'].replace(/^#/, '') }
+          collector = textCollector()
+        }
       } else if (el.localName === 'item') {
         const id = el.attributes['id']
         const href = el.attributes['href']
@@ -132,7 +160,27 @@ function parseOpf(xml: string, opfDir: string): Opf {
     onText: (text) => collector?.onText(text),
     onEnd: (_name, localName) => {
       stack.pop()
-      if (
+      if (collector && collectingSeriesMeta && localName === 'meta') {
+        const value = collector.value()
+        const meta = collectingSeriesMeta
+        collector = undefined
+        collectingSeriesMeta = undefined
+        if (meta.property === 'belongs-to-collection') {
+          epubSeries = {
+            ...(meta.id ? { id: meta.id } : {}),
+            name: value,
+            ...(meta.id && epubSeriesPositions.has(meta.id)
+              ? { position: epubSeriesPositions.get(meta.id) }
+              : {}),
+          }
+        } else {
+          const position = Number(value)
+          if (Number.isFinite(position) && meta.refines) {
+            epubSeriesPositions.set(meta.refines, position)
+            if (epubSeries?.id === meta.refines) epubSeries.position = position
+          }
+        }
+      } else if (
         collector &&
         (localName === 'title' || localName === 'creator' || localName === 'identifier')
       ) {
@@ -175,6 +223,18 @@ function parseOpf(xml: string, opfDir: string): Opf {
       title: titles[0],
       authors: creators,
       identifier,
+      ...(calibreSeries || epubSeries?.name
+        ? {
+            series: {
+              name: calibreSeries ?? epubSeries!.name!,
+              ...(calibreSeriesPosition !== undefined
+                ? { position: calibreSeriesPosition }
+                : epubSeries?.position !== undefined
+                  ? { position: epubSeries.position }
+                  : {}),
+            },
+          }
+        : {}),
     },
     cover,
     manifest,

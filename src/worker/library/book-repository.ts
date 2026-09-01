@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { Book, LibraryQuery, ReadingProgress } from '../../shared/domain/types'
+import type {
+  Book,
+  LibraryQuery,
+  ReadingProgress,
+  SeriesMembership,
+} from '../../shared/domain/types'
+import { parseSeriesMemberships } from '../../shared/domain/series'
 
 /**
  * Book repository — all SQL touching the library tables lives here.
@@ -41,12 +47,13 @@ interface BookRow {
   locator: string | null
   progression: number | null
   progress_updated_at: number | null
+  series: string
 }
 
 const BOOK_SELECT = `
   SELECT b.id, b.title, b.authors, b.local_path, b.remote_id, b.server_id, b.cover_id,
          b.finished, b.archived, b.downloaded, b.added_at, b.last_opened_at,
-         p.locator, p.progression, p.updated_at AS progress_updated_at
+         p.locator, p.progression, p.updated_at AS progress_updated_at, b.series
   FROM books b
   LEFT JOIN reading_progress p ON p.book_id = b.id
 `
@@ -95,6 +102,13 @@ export function rowToBook(row: BookRow): Book {
   if (row.server_id !== null) book.serverId = row.server_id
   if (row.cover_id !== null) book.coverId = row.cover_id
   if (row.last_opened_at !== null) book.lastOpenedAt = row.last_opened_at
+  let series: SeriesMembership[] = []
+  try {
+    series = parseSeriesMemberships(JSON.parse(row.series))
+  } catch {
+    // A malformed legacy row should not make the whole library unreadable.
+  }
+  if (series.length > 0) book.series = series
   if (row.locator !== null && row.progress_updated_at !== null) {
     const progress: ReadingProgress = {
       locator: JSON.parse(row.locator) as ReadingProgress['locator'],
@@ -114,9 +128,13 @@ export class BookRepository {
     const params: string[] = []
     const term = query.search.trim()
     if (term) {
-      sql += ` AND (b.title LIKE ? ESCAPE '\\' OR b.authors LIKE ? ESCAPE '\\')`
+      sql += ` AND (b.title LIKE ? ESCAPE '\\' OR b.authors LIKE ? ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1 FROM json_each(b.series) AS series_membership
+          WHERE json_extract(series_membership.value, '$.name') LIKE ? ESCAPE '\\'
+        ))`
       const pattern = likePattern(term)
-      params.push(pattern, pattern)
+      params.push(pattern, pattern, pattern)
     }
     sql += ` ${orderBy(query)}`
     const rows = this.db.prepare(sql).all(...params) as unknown as BookRow[]
@@ -308,8 +326,8 @@ export class BookRepository {
     const insertBook = this.db.prepare(`
       INSERT INTO books (id, folder_id, title, authors, local_path, remote_id, cover_id,
                          finished, archived, downloaded, added_at, last_opened_at,
-                         file_hash, epub_identifier, file_mtime, file_size)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         file_hash, epub_identifier, file_mtime, file_size, series)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const insertProgress = this.db.prepare(`
       INSERT INTO reading_progress (book_id, locator, progression, updated_at)
@@ -336,6 +354,7 @@ export class BookRepository {
           extra?.epubIdentifier ?? null,
           extra?.fileMtime ?? null,
           extra?.fileSize ?? null,
+          JSON.stringify(book.series ?? []),
         )
         if (book.progress) {
           insertProgress.run(

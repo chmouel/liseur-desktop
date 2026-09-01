@@ -1,5 +1,10 @@
-import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js'
-import type { LibraryFilter, LibrarySortKey } from '@shared/domain/types'
+import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js'
+import type {
+  LibraryEntry,
+  LibraryFilter,
+  LibrarySeriesEntry,
+  LibrarySortKey,
+} from '@shared/domain/types'
 import { useLibraryStore } from './store'
 import { VirtualBookGrid } from './VirtualBookGrid'
 import { ContinueReading } from './ContinueReading'
@@ -29,9 +34,24 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   const [statsOpen, setStatsOpen] = createSignal(false)
   const [sortMenuOpen, setSortMenuOpen] = createSignal(false)
   const [helpOpen, setHelpOpen] = createSignal(false)
+  const [openSeries, setOpenSeries] = createSignal<LibrarySeriesEntry | null>(null)
   let searchInput: HTMLInputElement | undefined
   let gridEl: HTMLDivElement | undefined
   const vim = createVimSession<LibraryCommand>(LIBRARY_BINDINGS)
+
+  // Keep an open stack live when sync replaces one of its volumes. The store
+  // updates entries incrementally, so this does not need another SQL query.
+  createEffect(
+    on(
+      () => store.entries(),
+      (entries) => {
+        const current = openSeries()
+        if (!current) return
+        const fresh = entries.find((entry) => entry.kind === 'series' && entry.id === current.id)
+        if (fresh?.kind === 'series') setOpenSeries(fresh)
+      },
+    ),
+  )
 
   // Chips a library has nothing to say with are left off rather than shown
   // inert: with no server every book is downloaded, and with nothing put
@@ -94,6 +114,12 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       if (e.key === 'Escape' || (vimMode() && e.key === 'q')) setStatsOpen(false)
       return
     }
+    if (openSeries() && e.key === 'Escape') {
+      e.preventDefault()
+      setOpenSeries(null)
+      setSelectedIndex(-1)
+      return
+    }
     if (sortMenuOpen() && e.key === 'Escape') {
       setSortMenuOpen(false)
       return
@@ -115,7 +141,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       return
     }
 
-    const count = store.books().length
+    const count = visibleEntries().length
     if (count === 0) return
 
     switch (e.key) {
@@ -132,7 +158,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         setSelectedIndex((i) => Math.max(0, i - gridColumns()))
         break
       case 'Enter':
-        if (selectedIndex() >= 0) openBook(selectedIndex())
+        if (selectedIndex() >= 0) openEntry(selectedIndex())
         break
       default:
         return
@@ -152,7 +178,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
 
   /** Moves the selection, landing on the first book when nothing is picked. */
   const moveSelection = (delta: number) => {
-    const count = store.books().length
+    const count = visibleEntries().length
     if (count === 0) return
     setSelectedIndex((i) => (i < 0 ? 0 : Math.min(count - 1, Math.max(0, i + delta))))
   }
@@ -166,7 +192,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
   }
 
   function runVimCommand(command: LibraryCommand, count: number | null): void {
-    const books = store.books()
+    const entries = visibleEntries()
     switch (command) {
       case 'left':
         times(count, () => moveSelection(-1))
@@ -186,17 +212,19 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
       case 'rowEnd':
         if (selectedIndex() >= 0) {
           setSelectedIndex((i) =>
-            Math.min(books.length - 1, i - (i % gridColumns()) + gridColumns() - 1),
+            Math.min(entries.length - 1, i - (i % gridColumns()) + gridColumns() - 1),
           )
         }
         break
       case 'first':
-        if (books.length > 0) setSelectedIndex(0)
+        if (entries.length > 0) setSelectedIndex(0)
         break
       case 'last':
         // `12G` is the twelfth book, as `12G` is the twelfth line.
-        if (books.length > 0) {
-          setSelectedIndex(count === null ? books.length - 1 : Math.min(books.length, count) - 1)
+        if (entries.length > 0) {
+          setSelectedIndex(
+            count === null ? entries.length - 1 : Math.min(entries.length, count) - 1,
+          )
         }
         break
       case 'halfPageDown':
@@ -206,7 +234,7 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         moveSelection(-gridColumns() * Math.max(1, Math.floor(gridRows() / 2)))
         break
       case 'open':
-        if (selectedIndex() >= 0) openBook(selectedIndex())
+        if (selectedIndex() >= 0) openEntry(selectedIndex())
         break
       case 'continueReading': {
         const book = store.continueReadingBook()
@@ -248,16 +276,31 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         setHelpOpen(true)
         break
       case 'closeOverlay':
-        if (sortMenuOpen()) setSortMenuOpen(false)
+        if (openSeries()) {
+          setOpenSeries(null)
+          setSelectedIndex(-1)
+        } else if (sortMenuOpen()) setSortMenuOpen(false)
         else if (searchOpen()) closeSearch()
         else setSelectedIndex(-1)
         break
     }
   }
 
-  const openBook = (index: number) => {
-    const book = store.books()[index]
-    if (!book) return
+  const visibleEntries = (): LibraryEntry[] =>
+    openSeries()
+      ? openSeries()!.books.map((book) => ({ kind: 'book', id: `book:${book.id}`, book }))
+      : store.entries()
+
+  const openEntry = (index: number) => {
+    const entry = visibleEntries()[index]
+    if (!entry) return
+    if (entry.kind === 'series') {
+      setOpenSeries(entry)
+      setSelectedIndex(-1)
+      gridEl?.scrollTo({ top: 0 })
+      return
+    }
+    const book = entry.book
     // Nothing to open until a book has a file; remote books fetch on open.
     if (!book.localPath && !book.remoteId) return
     props.onOpenBook(book.id)
@@ -451,21 +494,35 @@ export function LibraryScreen(props: { onOpenBook: (bookId: string) => void }): 
         </div>
       </div>
 
+      <Show when={openSeries()}>
+        {(series) => (
+          <div class="series-header">
+            <button type="button" class="series-back" onClick={() => setOpenSeries(null)}>
+              ← Library
+            </button>
+            <div>
+              <h1>{series().name}</h1>
+              <p>{series().books.length} books</p>
+            </div>
+          </div>
+        )}
+      </Show>
+
       <main class="library-main">
-        <Show when={!store.loading() && store.books().length === 0}>
+        <Show when={!store.loading() && visibleEntries().length === 0}>
           <p class="empty-state">
             {store.searchText() ? `No books match “${store.searchText()}”.` : 'No books here yet.'}
           </p>
         </Show>
 
         <VirtualBookGrid
-          books={store.books}
+          entries={visibleEntries}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
-          onOpen={openBook}
+          onOpen={(_entry, index) => openEntry(index)}
           gridRef={(el) => (gridEl = el)}
           header={
-            <Show when={store.filter() === 'all' && !store.searchText()}>
+            <Show when={!openSeries() && store.filter() === 'all' && !store.searchText()}>
               <ContinueReading
                 book={store.continueReadingBook()}
                 onOpen={() => {

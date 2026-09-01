@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js'
 import type {
   Book,
+  LibraryEntry,
   LibraryFilter,
   LibraryQueryResult,
   LibrarySortKey,
@@ -29,6 +30,7 @@ const [sort, setSortSignal] = createSignal<LibrarySortKey>(DEFAULT_QUERY.sort)
 const [direction, setDirectionSignal] = createSignal<SortDirection>(DEFAULT_QUERY.direction)
 
 const [books, setBooks] = createSignal<Book[]>([])
+const [entries, setEntries] = createSignal<LibraryEntry[]>([])
 const [totalCount, setTotalCount] = createSignal(0)
 const [archivedCount, setArchivedCount] = createSignal(0)
 const [hasServer, setHasServer] = createSignal(false)
@@ -45,6 +47,7 @@ export function useLibraryStore() {
     sort,
     direction,
     books,
+    entries,
     totalCount,
     archivedCount,
     hasServer,
@@ -92,6 +95,7 @@ async function refresh(): Promise<void> {
     const result: LibraryQueryResult = await window.liseur.library.query(buildQuery())
     if (myGeneration !== generation) return // stale — a newer query is in flight
     setBooks(result.books)
+    setEntries(result.entries)
     setTotalCount(result.totalCount)
     setArchivedCount(result.archivedCount)
     setLoading(false)
@@ -112,6 +116,27 @@ async function refreshContinueReading(): Promise<void> {
 
 let bookAddedDebounce: ReturnType<typeof setTimeout> | undefined
 
+function replaceBookInEntries(current: LibraryEntry[], book: Book): LibraryEntry[] {
+  return current.map((entry) => {
+    if (entry.kind === 'book') {
+      return entry.book.id === book.id ? { ...entry, book } : entry
+    }
+    const index = entry.books.findIndex((volume) => volume.id === book.id)
+    if (index === -1) return entry
+    const books = entry.books.slice()
+    books[index] = book
+    const cover =
+      books.find((volume) => {
+        const progression = volume.progress?.progression ?? 0
+        return !volume.finished && progression > 0 && progression < 1
+      }) ??
+      books.find((volume) => !volume.finished) ??
+      books[0] ??
+      entry.cover
+    return { ...entry, books, cover }
+  })
+}
+
 export function initLibrary(): void {
   void refresh()
   void refreshContinueReading()
@@ -127,6 +152,7 @@ export function initLibrary(): void {
       next[index] = book
       return next
     })
+    setEntries((current) => replaceBookInEntries(current, book))
     // The banner holds its own copy of the book. Closing the reader shows
     // the library before the final position is saved (visual first), so the
     // save lands here — without this the banner kept showing the position

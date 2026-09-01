@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Locator } from '../../shared/domain/types'
+import { parseSeriesMemberships } from '../../shared/domain/series'
 import { Http, type HttpResponse, type HttpResult } from './http'
 import type {
   ProgressRecord,
@@ -72,6 +73,7 @@ interface CatalogBookPayload {
   contributors?: unknown
   size_bytes?: unknown
   cover_url?: unknown
+  series?: unknown
 }
 
 function catalogBook(payload: CatalogBookPayload): RemoteBook | null {
@@ -100,6 +102,7 @@ function catalogBook(payload: CatalogBookPayload): RemoteBook | null {
       : undefined
   const coverUrl =
     typeof payload.cover_url === 'string' && payload.cover_url ? payload.cover_url : undefined
+  const series = parseSeriesMemberships(payload.series)
   return {
     remoteId,
     title,
@@ -107,6 +110,7 @@ function catalogBook(payload: CatalogBookPayload): RemoteBook | null {
     sizeBytes,
     downloadUrl: `/v1/books/${encodeURIComponent(remoteId)}/download`,
     ...(coverUrl ? { coverUrl } : {}),
+    ...(series.length > 0 ? { series } : {}),
   }
 }
 

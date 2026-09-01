@@ -33,6 +33,15 @@ export interface ReadingProgress {
   updatedAt: number
 }
 
+/** One series a book belongs to. A book may be in more than one. */
+export interface SeriesMembership {
+  /** A server's stable id, retained for future series actions. */
+  id?: string | undefined
+  name: string
+  /** The volume number when the source knows it. */
+  position?: number | undefined
+}
+
 export interface Book {
   id: BookId
   title: string
@@ -49,6 +58,29 @@ export interface Book {
   addedAt: number
   lastOpenedAt?: number
   progress?: ReadingProgress
+  /** Effective series memberships from the file or catalog. */
+  series?: SeriesMembership[]
+}
+
+/** One card on the library shelf: either a book or a stack of volumes. */
+export type LibraryEntry = LibraryBookEntry | LibrarySeriesEntry
+
+export interface LibraryBookEntry {
+  kind: 'book'
+  id: string
+  book: Book
+}
+
+export interface LibrarySeriesEntry {
+  kind: 'series'
+  /** Stable while the series name remains the same. */
+  id: string
+  name: string
+  authors: string[]
+  /** Ordered volumes, including server-only books. */
+  books: Book[]
+  /** The cover for the next unread volume, or the first volume. */
+  cover: Book
 }
 
 export type LibraryFilter = 'all' | 'downloaded' | 'unread' | 'archived'
@@ -66,6 +98,8 @@ export interface LibraryQuery {
 
 export interface LibraryQueryResult {
   books: Book[]
+  /** Grouped shelf entries, prepared by the worker so the renderer stays responsive. */
+  entries: LibraryEntry[]
   totalCount: number
   /**
    * How many books are archived, whatever the filter asked for. The library

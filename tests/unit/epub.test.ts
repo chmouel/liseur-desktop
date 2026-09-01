@@ -22,6 +22,30 @@ describe('EpubFile', () => {
     expect(meta.cover?.entryPath).toBe('OEBPS/images/cover.png')
   })
 
+  it('reads Calibre series metadata', () => {
+    const meta = new EpubFile(
+      buildEpub({ series: { name: 'The Expanse', position: 2 } }),
+    ).metadata()
+    expect(meta.series).toEqual({ name: 'The Expanse', position: 2 })
+  })
+
+  it('reads EPUB 3 collection metadata', () => {
+    const meta = new EpubFile(
+      buildEpub({ epubSeries: { name: 'The Expanse', position: 2 } }),
+    ).metadata()
+    expect(meta.series).toEqual({ name: 'The Expanse', position: 2 })
+  })
+
+  it('reads EPUB 3 group position before the collection metadata', () => {
+    const meta = new EpubFile(
+      buildEpub({
+        epubSeries: { name: 'The Expanse', position: 2 },
+        epubSeriesPositionFirst: true,
+      }),
+    ).metadata()
+    expect(meta.series).toEqual({ name: 'The Expanse', position: 2 })
+  })
+
   it('reads deflated archives', () => {
     const epub = new EpubFile(buildEpub({ deflate: true, title: 'Deflated' }))
     expect(epub.metadata().title).toBe('Deflated')

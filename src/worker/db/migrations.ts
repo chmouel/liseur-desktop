@@ -275,4 +275,13 @@ export const MIGRATIONS: readonly Migration[] = [
       `)
     },
   },
+  {
+    version: 10,
+    name: 'book series memberships',
+    up: (db) => {
+      // A JSON array preserves liseur-sync's many memberships without
+      // flattening a book into a single, arbitrary series.
+      db.exec("ALTER TABLE books ADD COLUMN series TEXT NOT NULL DEFAULT '[]';")
+    },
+  },
 ]
